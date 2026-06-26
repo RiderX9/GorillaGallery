@@ -8,6 +8,7 @@ A premium offline Android gallery app with a liquid glass design system.
   <img src="screenshots/home.png" width="200"/>
   <img src="screenshots/viewer.png" width="200"/>
   <img src="screenshots/editor.png" width="200"/>
+  <img src="screenshots/settings.png" width="200"/>
 </p>
 
 ## Features
