@@ -40,11 +40,10 @@ A premium offline Android gallery app with a liquid glass design system.
 
 ## Installation
 
-Clone the repo and open in Android Studio:
-
-git clone https://github.com/RiderX9/GorillaGallery.git
-
-Then build and run on a device or emulator running Android 12+.
+1. Go to [Releases](https://github.com/RiderX9/GorillaGallery/releases/latest)
+2. Download the latest APK
+3. Enable **Install from unknown sources** on your device
+4. Install and enjoy
 
 ## Developer
 
