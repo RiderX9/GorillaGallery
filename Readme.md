@@ -13,7 +13,7 @@ A premium offline Android gallery app with a liquid glass design system.
 ## Features
 
 - Photo and video library grouped by Day, Month, Year
-- Full-screen viewer with pinch-to-zoom up to 5×
+- Full-screen viewer with pinch-to-zoom
 - Photo editor — crop, rotate, brightness, contrast, filters, doodle
 - Liquid glass UI design system
 - Albums with auto-detection from MediaStore
