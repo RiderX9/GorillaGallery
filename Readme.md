@@ -10,8 +10,8 @@ A premium offline Android gallery app with a liquid glass design system.
   <img src="https://github.com/user-attachments/assets/1a572765-14d7-4781-bc70-9dcdf06c068f" width="32%" alt="Editor Screen" />
 </p>
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/078651d8-5a9e-4c2c-bdb7-9c8345b0f831" width="32%" alt="Settings Screen" />
   <img src="https://github.com/user-attachments/assets/8e4c3ec1-2ad9-432a-a55a-6ad9db258c20" width="32%" alt="Info Sheet Screen" />
+  <img src="https://github.com/user-attachments/assets/078651d8-5a9e-4c2c-bdb7-9c8345b0f831" width="32%" alt="Settings Screen" />
   <img src="https://github.com/user-attachments/assets/c1274b8b-4fd6-4eae-99d0-922a750874ba" width="32%" alt="Privacy Settings Screen" />
 </p>
 
