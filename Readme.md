@@ -4,12 +4,9 @@ A premium offline Android gallery app with a liquid glass design system.
 
 ## Screenshots
 
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/c39d184e-3348-423a-9fed-42c94d13805e" width="24%" alt="Home Screen" />
-  <img src="https://github.com/user-attachments/assets/e436fef5-7b43-4260-ac69-b97aa4f96746" width="24%" alt="Viewer Screen" />
-  <img src="https://github.com/user-attachments/assets/1a572765-14d7-4781-bc70-9dcdf06c068f" width="24%" alt="Editor Screen" />
-  <img src="https://github.com/user-attachments/assets/078651d8-5a9e-4c2c-bdb7-9c8345b0f831" width="24%" alt="Settings Screen" />
-</p>
+| <img src="screenshots/home.png" width="150" alt="Home Label"/> | <img src="screenshots/viewer.png" width="150" alt="Viewer Label"/> | <img src="screenshots/editor.png" width="150" alt="Editor Label"/> | <img src="screenshots/settings.png" width="150" alt="Settings Label"/> |
+| :---: | :---: | :---: | :---: |
+| <img src="https://github.com/user-attachments/assets/c39d184e-3348-423a-9fed-42c94d13805e" width="250" alt="Home Screen" /> | <img src="https://github.com/user-attachments/assets/e436fef5-7b43-4260-ac69-b97aa4f96746" width="250" alt="Viewer Screen" /> | <img src="https://github.com/user-attachments/assets/1a572765-14d7-4781-bc70-9dcdf06c068f" width="250" alt="Editor Screen" /> | <img src="https://github.com/user-attachments/assets/078651d8-5a9e-4c2c-bdb7-9c8345b0f831" width="250" alt="Settings Screen" /> |
 
 ## Features
 
