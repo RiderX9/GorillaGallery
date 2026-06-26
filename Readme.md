@@ -4,16 +4,28 @@ A premium offline Android gallery app with a liquid glass design system.
 
 ## Screenshots
 
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/166acfcc-10dd-4ebf-9065-f1ec371aff87" width="32%" alt="Home Screen" />
-  <img src="https://github.com/user-attachments/assets/a1fa9c09-08f1-4037-b677-cafcb45bea87" width="32%" alt="Viewer Screen" />
-  <img src="https://github.com/user-attachments/assets/e5b606ae-054a-4503-a0b3-8597669c4f28" width="32%" alt="Editor Screen" />
-</p>
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/8e4c3ec1-2ad9-432a-a55a-6ad9db258c20" width="32%" alt="Info Sheet Screen" />
-  <img src="https://github.com/user-attachments/assets/078651d8-5a9e-4c2c-bdb7-9c8345b0f831" width="32%" alt="Settings Screen" />
-  <img src="https://github.com/user-attachments/assets/c1274b8b-4fd6-4eae-99d0-922a750874ba" width="32%" alt="Privacy Settings Screen" />
-</p>
+<table align="center">
+  <tr>
+    <th width="33%">Home</th>
+    <th width="33%">Viewer</th>
+    <th width="33%">Editor</th>
+  </tr>
+  <tr>
+    <td><img src="https://github.com/user-attachments/assets/166acfcc-10dd-4ebf-9065-f1ec371aff87" width="100%" alt="Home Screen" /></td>
+    <td><img src="https://github.com/user-attachments/assets/a1fa9c09-08f1-4037-b677-cafcb45bea87" width="100%" alt="Viewer Screen" /></td>
+    <td><img src="https://github.com/user-attachments/assets/e5b606ae-054a-4503-a0b3-8597669c4f28" width="100%" alt="Editor Screen" /></td>
+  </tr>
+  <tr>
+    <th width="33%">Info Sheet</th>
+    <th width="33%">Settings</th>
+    <th width="33%">Privacy Settings</th>
+  </tr>
+  <tr>
+    <td><img src="https://github.com/user-attachments/assets/8e4c3ec1-2ad9-432a-a55a-6ad9db258c20" width="100%" alt="Info Sheet Screen" /></td>
+    <td><img src="https://github.com/user-attachments/assets/078651d8-5a9e-4c2c-bdb7-9c8345b0f831" width="100%" alt="Settings Screen" /></td>
+    <td><img src="https://github.com/user-attachments/assets/c1274b8b-4fd6-4eae-99d0-922a750874ba" width="100%" alt="Privacy Settings Screen" /></td>
+  </tr>
+</table>
 
 ## Features
 
