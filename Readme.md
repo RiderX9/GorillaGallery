@@ -5,10 +5,14 @@ A premium offline Android gallery app with a liquid glass design system.
 ## Screenshots
 
 <p align="center">
-  <img src="screenshots/home.png" width="200"/>
-  <img src="screenshots/viewer.png" width="200"/>
-  <img src="screenshots/editor.png" width="200"/>
-  <img src="screenshots/settings.png" width="200"/>
+  <img src="screenshots/home.png" width="200"/> <img width="1080" height="2400" alt="Screenshot_20260626-183010_G Gallery" src="https://github.com/user-attachments/assets/c39d184e-3348-423a-9fed-42c94d13805e" />
+
+  <img src="screenshots/viewer.png" width="200"/> <img width="1080" height="2400" alt="Screenshot_20260626-183134_G Gallery" src="https://github.com/user-attachments/assets/e436fef5-7b43-4260-ac69-b97aa4f96746" />
+
+  <img src="screenshots/editor.png" width="200"/> <img width="1080" height="2400" alt="Screenshot_20260626-183144_G Gallery" src="https://github.com/user-attachments/assets/1a572765-14d7-4781-bc70-9dcdf06c068f" />
+
+  <img src="screenshots/settings.png" width="200"/> <img width="1080" height="2400" alt="Screenshot_20260626-183156_G Gallery" src="https://github.com/user-attachments/assets/078651d8-5a9e-4c2c-bdb7-9c8345b0f831" />
+
 </p>
 
 ## Features
