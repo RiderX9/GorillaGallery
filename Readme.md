@@ -4,20 +4,11 @@ A premium offline Android gallery app with a liquid glass design system.
 
 ## Screenshots
 
-<table align="center">
-  <tr>
-    <th width="25%">Home</th>
-    <th width="25%">Viewer</th>
-    <th width="25%">Editor</th>
-    <th width="25%">Settings</th>
-  </tr>
-  <tr>
-    <td width="25%"><img src="https://github.com/user-attachments/assets/c39d184e-3348-423a-9fed-42c94d13805e" width="100%" /></td>
-    <td width="25%"><img src="https://github.com/user-attachments/assets/e436fef5-7b43-4260-ac69-b97aa4f96746" width="100%" /></td>
-    <td width="25%"><img src="https://github.com/user-attachments/assets/1a572765-14d7-4781-bc70-9dcdf06c068f" width="100%" /></td>
-    <td width="25%"><img src="https://github.com/user-attachments/assets/078651d8-5a9e-4c2c-bdb7-9c8345b0f831" width="100%" /></td>
-  </tr>
-</table>
+| Home | Viewer |
+|:---:|:---:|
+| <img src="https://github.com/user-attachments/assets/c39d184e-3348-423a-9fed-42c94d13805e" width="260"/> | <img src="https://github.com/user-attachments/assets/e436fef5-7b43-4260-ac69-b97aa4f96746" width="260"/> |
+| **Editor** | **Settings** |
+| <img src="https://github.com/user-attachments/assets/1a572765-14d7-4781-bc70-9dcdf06c068f" width="260"/> | <img src="https://github.com/user-attachments/assets/078651d8-5a9e-4c2c-bdb7-9c8345b0f831" width="260"/> |
 
 ## Features
 
