@@ -19,7 +19,7 @@ A premium offline Android gallery app with a liquid glass design system.
 - Albums with auto-detection from MediaStore
 - Favorites, Trash with 30-day auto-empty
 - Secure Folder with biometric unlock
-- Reactive gradient background driven by photo colors
+- Adaptive Accents colours
 - Video player with seek bar and mute control
 
 ## Tech Stack
