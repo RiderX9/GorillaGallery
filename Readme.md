@@ -5,9 +5,12 @@ A premium offline Android gallery app with a liquid glass design system.
 ## Screenshots
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/c39d184e-3348-423a-9fed-42c94d13805e" width="32%" alt="Home Screen" />
-  <img src="https://github.com/user-attachments/assets/e436fef5-7b43-4260-ac69-b97aa4f96746" width="32%" alt="Viewer Screen" />
-  <img src="https://github.com/user-attachments/assets/1a572765-14d7-4781-bc70-9dcdf06c068f" width="32%" alt="Editor Screen" />
+  <img src="<img width="1080" height="2400" alt="Screenshot_20260626-192713_G Gallery" src="https://github.com/user-attachments/assets/166acfcc-10dd-4ebf-9065-f1ec371aff87" />
+" width="32%" alt="Home Screen" />
+  <img src="<img width="1080" height="2400" alt="Screenshot_20260626-192727_G Gallery" src="https://github.com/user-attachments/assets/a1fa9c09-08f1-4037-b677-cafcb45bea87" />
+" width="32%" alt="Viewer Screen" />
+  <img src="<img width="1080" height="2400" alt="Screenshot_20260626-192811_G Gallery" src="https://github.com/user-attachments/assets/e5b606ae-054a-4503-a0b3-8597669c4f28" />
+" width="32%" alt="Editor Screen" />
 </p>
 <p align="center">
   <img src="https://github.com/user-attachments/assets/8e4c3ec1-2ad9-432a-a55a-6ad9db258c20" width="32%" alt="Info Sheet Screen" />
