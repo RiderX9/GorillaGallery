@@ -4,9 +4,9 @@ A premium offline Android gallery app with a beautiful liquid glass design syste
 
 ## 📱 Screenshots
 
-| Albums | Photos | Settings | Search |
+| Photos | Albums | Settings | Search |
 |:---:|:---:|:---:|:---:|
-| <img src="https://github.com/user-attachments/assets/7c3d1b41-c232-415b-9c43-b09915f377d4" /> | <img src="https://github.com/user-attachments/assets/23d45392-5ebe-4913-8006-fcc223998ea7" /> | <img src="https://github.com/user-attachments/assets/2f3318cf-1c50-4e11-8a15-a8f1bb3a4e84" /> | <img src="https://github.com/user-attachments/assets/5a2aff02-3bf5-43ae-add2-f02c5598fc05" /> |
+| <img src="https://github.com/user-attachments/assets/23d45392-5ebe-4913-8006-fcc223998ea7" width="220" /> | <img src="https://github.com/user-attachments/assets/7c3d1b41-c232-415b-9c43-b09915f377d4" width="220" /> | <img src="https://github.com/user-attachments/assets/2f3318cf-1c50-4e11-8a15-a8f1bb3a4e84" width="220" /> | <img src="https://github.com/user-attachments/assets/5a2aff02-3bf5-43ae-add2-f02c5598fc05" width="220" /> |
 
 ## ✨ Features
 
