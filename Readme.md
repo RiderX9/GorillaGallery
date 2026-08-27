@@ -1,67 +1,45 @@
-# Gorilla Gallery
+# 🦍 Gorilla Gallery
 
-A premium offline Android gallery app with a liquid glass design system.
+A premium offline Android gallery app with a beautiful liquid glass design system.
 
-## Screenshots
+## 📱 Screenshots
 
-<table align="center">
-  <tr>
-    <th width="33%">Home</th>
-    <th width="33%">Viewer</th>
-    <th width="33%">Editor</th>
-  </tr>
-  <tr>
-    <td><img src="https://github.com/user-attachments/assets/166acfcc-10dd-4ebf-9065-f1ec371aff87" width="100%" alt="Home Screen" /></td>
-    <td><img src="https://github.com/user-attachments/assets/a1fa9c09-08f1-4037-b677-cafcb45bea87" width="100%" alt="Viewer Screen" /></td>
-    <td><img src="https://github.com/user-attachments/assets/e5b606ae-054a-4503-a0b3-8597669c4f28" width="100%" alt="Editor Screen" /></td>
-  </tr>
-  <tr>
-    <th width="33%">Info Sheet</th>
-    <th width="33%">Settings</th>
-    <th width="33%">Privacy Settings</th>
-  </tr>
-  <tr>
-    <td><img src="https://github.com/user-attachments/assets/8e4c3ec1-2ad9-432a-a55a-6ad9db258c20" width="100%" alt="Info Sheet Screen" /></td>
-    <td><img src="https://github.com/user-attachments/assets/078651d8-5a9e-4c2c-bdb7-9c8345b0f831" width="100%" alt="Settings Screen" /></td>
-    <td><img src="https://github.com/user-attachments/assets/c1274b8b-4fd6-4eae-99d0-922a750874ba" width="100%" alt="Privacy Settings Screen" /></td>
-  </tr>
-</table>
+| Albums | Photos | Settings | Search |
+|:---:|:---:|:---:|:---:|
+| <img src="https://github.com/user-attachments/assets/7c3d1b41-c232-415b-9c43-b09915f377d4" /> | <img src="https://github.com/user-attachments/assets/23d45392-5ebe-4913-8006-fcc223998ea7" /> | <img src="https://github.com/user-attachments/assets/2f3318cf-1c50-4e11-8a15-a8f1bb3a4e84" /> | <img src="https://github.com/user-attachments/assets/5a2aff02-3bf5-43ae-add2-f02c5598fc05" /> |
 
-## Features
+## ✨ Features
 
-* Photo and video library grouped by Day, Month, Year
-* Full-screen viewer with pinch-to-zoom
-* Photo editor — crop, rotate, brightness, contrast, filters, doodle
-* Liquid glass UI design system
-* Albums with auto-detection from MediaStore
-* Favorites, Trash with 30-day auto-empty
-* Secure Folder with biometric unlock
-* Adaptive Accents colours
-* Video player with seek bar and mute control
+* **Smart Organization:** Photo and video library grouped by Day, Month, and Year.
+* **Intelligent Search:** Fully offline, on-device machine learning for face detection, image labeling, object detection, and text recognition (OCR).
+* **Immersive Viewing:** Full-screen viewer with pinch-to-zoom support.
+* **Built-in Photo Editor:** Powerful editor with crop, rotate, brightness, contrast, filters, and doodle capabilities.
+* **Video Editor & Playback:** Integrated video player (ExoPlayer + FFmpeg) with seek bar and mute control, plus a built-in video editor for trimming.
+* **Premium Aesthetics:** Stunning liquid glass UI design system featuring adaptive accent colors and backdrop blur.
+* **Smart Albums:** Auto-detection of albums directly from the MediaStore.
+* **Secure & Private:** Dedicated Secure Folder protected by biometric unlock.
+* **Safe Deletion:** Trash with 30-day auto-empty alongside a Favorites feature.
 
-## Tech Stack
+## 🛠 Tech Stack
 
-* Kotlin + Jetpack Compose
-* Coil for image loading
-* Media3/ExoPlayer for video
-* MediaStore API
-* Room database
-* DataStore for settings
-* BiometricPrompt API
-* Android 12+ RenderEffect blur
+* **UI:** Kotlin + Jetpack Compose, Material Kolor (adaptive colors), Kyant Backdrop
+* **Media:** Coil (image loading), Media3/ExoPlayer (video playback), Media3 Transformer (video editing)
+* **Machine Learning:** Google ML Kit (Face Detection, Text Recognition, Image Labeling, Object Detection), TensorFlow Lite
+* **Storage:** MediaStore API, Room Database, DataStore (preferences)
+* **Security:** BiometricPrompt API
+* **Graphics:** Android 12+ RenderEffect blur
 
-## Requirements
+## 📱 Requirements
 
-* Android 12 or higher
-* Minimum SDK 31
+* Android 12 or higher (Minimum SDK 31)
 
-## Installation
+## 📥 Installation
 
-1. Go to Releases
-2. Download the latest APK
-3. Enable "Install from unknown sources" on your device
-4. Install and enjoy
+1. Go to the **Releases** tab.
+2. Download the latest `.apk` file.
+3. Enable "Install from unknown sources" in your device settings.
+4. Install and enjoy!
 
-## Developer
+## 👨‍💻 Developer
 
-Made by **RiderX9**
+Made by **[RiderX9](https://github.com/RiderX9)**
