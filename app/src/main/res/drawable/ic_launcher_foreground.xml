@@ -1,0 +1,27 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Glass photo frame -->
+    <path
+        android:fillColor="#26FFFFFF"
+        android:strokeColor="#59FFFFFF"
+        android:strokeWidth="1.5"
+        android:pathData="M30,34 L78,34 A6,6 0 0 1 84,40 L84,68 A6,6 0 0 1 78,74 L30,74 A6,6 0 0 1 24,68 L24,40 A6,6 0 0 1 30,34 Z" />
+
+    <!-- Sun / dominant color blob -->
+    <path
+        android:fillColor="#FFD27F"
+        android:pathData="M40,48 m-5,0 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0" />
+
+    <!-- Mountains -->
+    <path
+        android:fillColor="#B79CFF"
+        android:pathData="M24,68 L43,52 L57,64 L70,50 L84,63 L84,68 A6,6 0 0 1 78,74 L30,74 A6,6 0 0 1 24,68 Z" />
+
+    <path
+        android:fillColor="#7FE7FF"
+        android:pathData="M24,68 L43,58 L60,71 L72,62 L84,70 L84,68 A6,6 0 0 1 78,74 L30,74 A6,6 0 0 1 24,68 Z" />
+</vector>
