@@ -5,7 +5,6 @@ import androidx.lifecycle.viewModelScope
 import com.gorilla.gallery.AppContainer
 import com.gorilla.gallery.data.model.MediaItem
 import com.gorilla.gallery.data.repo.PersonCategory
-import com.gorilla.gallery.data.repo.TripCard
 import com.gorilla.gallery.ui.viewModelFactory
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,7 +27,6 @@ class SearchViewModel(container: AppContainer) : ViewModel() {
     private val objectIndexRepo = container.objectIndexRepository
     private val textIndexRepo = container.textIndexRepository
     private val peopleRepo = container.peopleRepository
-    private val tripsRepo = container.tripsRepository
     private val prefs = container.context.getSharedPreferences("people_prefs", android.content.Context.MODE_PRIVATE)
 
     private val _query = MutableStateFlow("")
@@ -40,12 +38,10 @@ class SearchViewModel(container: AppContainer) : ViewModel() {
     private val _peopleCategories = MutableStateFlow<List<PersonCategory>>(emptyList())
     val peopleCategories: StateFlow<List<PersonCategory>> = _peopleCategories.asStateFlow()
 
-    private val _trips = MutableStateFlow<List<TripCard>>(emptyList())
-    val trips: StateFlow<List<TripCard>> = _trips.asStateFlow()
+
 
     init {
         viewModelScope.launch { refreshPeople() }
-        viewModelScope.launch { refreshTrips() }
         viewModelScope.launch {
             peopleRepo.categoriesChanged.collect { refreshPeople() }
         }
@@ -85,19 +81,13 @@ class SearchViewModel(container: AppContainer) : ViewModel() {
         }
     }
 
-    suspend fun refreshTrips() {
-        val items = mediaRepo.items.first()
-        _trips.value = tripsRepo.buildTrips(items)
-    }
-
     @OptIn(FlowPreview::class)
     val results: StateFlow<List<MediaItem>> =
         combine(
             mediaRepo.items,
             _query.debounce(150),
-            _peopleCategories,
-            _trips
-        ) { items, q, people, trips ->
+            _peopleCategories
+        ) { items, q, people ->
             val term = q.trim()
             if (term.isBlank()) emptyList()
             else {
@@ -112,17 +102,12 @@ class SearchViewModel(container: AppContainer) : ViewModel() {
                 val objectMatches = objectIndexRepo.searchImagePaths(term)
                 val textMatches = textIndexRepo.searchImagePaths(term)
                 val peopleMatches = people.filter { it.label.contains(term, ignoreCase = true) }.flatMap { it.imagePaths }.toSet()
-                val tripMatches = trips.filter { 
-                    it.locationName.contains(term, ignoreCase = true) || 
-                    it.dateRange.contains(term, ignoreCase = true) 
-                }.flatMap { it.imagePaths }.toSet()
                 items.filter {
                     matches(it, term) ||
                         it.uri.toString() in labelMatches ||
                         it.uri.toString() in objectMatches ||
                         it.uri.toString() in textMatches ||
-                        it.uri.toString() in peopleMatches ||
-                        it.uri.toString() in tripMatches
+                        it.uri.toString() in peopleMatches
                 }
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())

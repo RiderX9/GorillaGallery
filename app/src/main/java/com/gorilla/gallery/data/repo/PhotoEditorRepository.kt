@@ -30,7 +30,6 @@ import kotlin.math.roundToInt
  */
 class PhotoEditorRepository(
     private val context: Context,
-    private val geocoderRepository: GeocoderRepository,
 ) {
     private val prefs: SharedPreferences = context.getSharedPreferences("metadata_overrides", Context.MODE_PRIVATE)
 
@@ -179,7 +178,7 @@ class PhotoEditorRepository(
                 
                 android.util.Log.d("GorillaGallery", "readExif: lat=$lat lon=$lon")
                 val locationName = if (lat != null && lon != null) {
-                    val name = geocoderRepository.getLocality(lat, lon)
+                    val name = null
                     android.util.Log.d("GorillaGallery", "readExif: locationName=$name")
                     name ?: "$lat, $lon"
                 } else null

@@ -226,7 +226,6 @@ private fun SearchCategories(
     onOpenSeeAllPeople: () -> Unit = {},
 ) {
     val peopleCategories by vm.peopleCategories.collectAsStateWithLifecycle()
-    val trips by vm.trips.collectAsStateWithLifecycle()
 
     androidx.compose.foundation.lazy.LazyColumn(
         contentPadding = contentPadding,

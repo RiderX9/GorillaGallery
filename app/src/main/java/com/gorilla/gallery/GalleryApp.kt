@@ -9,7 +9,6 @@ import com.gorilla.gallery.data.db.AppDatabase
 import com.gorilla.gallery.data.repo.AlbumRepository
 import com.gorilla.gallery.data.repo.FaceIndexRepository
 import com.gorilla.gallery.data.repo.FavoritesRepository
-import com.gorilla.gallery.data.repo.GeocoderRepository
 import com.gorilla.gallery.data.repo.ImageLabelRepository
 import com.gorilla.gallery.data.repo.MediaStoreRepository
 import com.gorilla.gallery.data.repo.ObjectIndexRepository
@@ -19,7 +18,6 @@ import com.gorilla.gallery.data.repo.SecureFolderRepository
 import com.gorilla.gallery.data.repo.TextIndexRepository
 import com.gorilla.gallery.data.repo.ThumbnailRepository
 import com.gorilla.gallery.data.repo.TrashRepository
-import com.gorilla.gallery.data.repo.TripsRepository
 import com.gorilla.gallery.data.repo.VideoEditorRepository
 import com.gorilla.gallery.data.settings.SettingsRepository
 import kotlinx.coroutines.CoroutineScope
@@ -76,13 +74,11 @@ class AppContainer(app: GalleryApp) {
     val faceIndexRepository = FaceIndexRepository(database, appScope)
     val objectIndexRepository = ObjectIndexRepository(database)
     val textIndexRepository = TextIndexRepository(database)
-    val geocoderRepository = GeocoderRepository(context)
     val peopleRepository = PeopleRepository(database, context)
-    val tripsRepository = TripsRepository(context, geocoderRepository)
     val favoritesRepository = FavoritesRepository(database, mediaRepository)
     val trashRepository = TrashRepository(context, database, mediaRepository)
     val secureFolderRepository = SecureFolderRepository(context, database, mediaRepository)
-    val photoEditorRepository = PhotoEditorRepository(context, geocoderRepository)
+    val photoEditorRepository = PhotoEditorRepository(context)
     val videoEditorRepository = VideoEditorRepository(context)
     val thumbnailRepository = ThumbnailRepository(context)
 }
