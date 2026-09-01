@@ -390,47 +390,52 @@ private fun InnerMetricCard(tag: String, value: String, modifier: Modifier = Mod
 
 private fun consolidateLabels(labels: List<String>): List<String> {
     val results = mutableSetOf<String>()
-    val text = labels.joinToString(" ").lowercase()
+    
+    // Convert to a set of words for fast and exact matching, splitting by space just in case a label is multiple words
+    val words = labels.flatMap { it.lowercase().split(Regex("\\s+")) }.toSet()
 
-    // Pets & Animals (mutually exclusive specifics to avoid "Cat" AND "Dog" if confused, take first match, or allow both if clearly distinct)
-    if (text.contains("cat") || text.contains("kitten") || text.contains("feline")) results.add("Cat")
-    else if (text.contains("dog") || text.contains("puppy") || text.contains("canine")) results.add("Dog")
-    else if (text.contains("bird") || text.contains("parrot") || text.contains("avian")) results.add("Bird")
-    else if (text.contains("horse") || text.contains("equine")) results.add("Horse")
-    else if (text.contains("pet") || text.contains("animal") || text.contains("wildlife") || text.contains("mammal")) results.add("Animal")
+    // Helper to check if any word in the given list is present
+    fun hasAny(vararg terms: String): Boolean = terms.any { words.contains(it) }
+
+    // Pets & Animals
+    if (hasAny("cat", "kitten", "feline")) results.add("Cat")
+    else if (hasAny("dog", "puppy", "canine")) results.add("Dog")
+    else if (hasAny("bird", "parrot", "avian")) results.add("Bird")
+    else if (hasAny("horse", "equine")) results.add("Horse")
+    else if (hasAny("pet", "animal", "wildlife", "mammal", "reptile", "insect", "bug")) results.add("Animal")
 
     // People
-    if (text.contains("person") || text.contains("man") || text.contains("woman") || text.contains("boy") || text.contains("girl") || text.contains("face") || text.contains("skin") || text.contains("hair") || text.contains("smile") || text.contains("selfie") || text.contains("portrait") || text.contains("human")) {
+    if (hasAny("person", "man", "woman", "boy", "girl", "face", "skin", "hair", "smile", "selfie", "portrait", "human", "people")) {
         results.add("Person")
     }
 
     // Food
-    if (text.contains("food") || text.contains("meal") || text.contains("dessert") || text.contains("fruit") || text.contains("vegetable") || text.contains("drink") || text.contains("snack") || text.contains("dish") || text.contains("cuisine")) {
+    if (hasAny("food", "meal", "dessert", "fruit", "vegetable", "drink", "snack", "dish", "cuisine", "meat", "beverage")) {
         results.add("Food")
     }
 
     // Nature
-    if (text.contains("nature") || text.contains("landscape") || text.contains("mountain") || text.contains("water") || text.contains("ocean") || text.contains("beach") || text.contains("sky") || text.contains("tree") || text.contains("plant") || text.contains("flower") || text.contains("forest") || text.contains("outdoor")) {
+    if (hasAny("nature", "landscape", "mountain", "water", "ocean", "beach", "sky", "tree", "plant", "flower", "forest", "outdoor", "grass", "petal", "leaf")) {
         results.add("Nature")
     }
 
     // Urban / Architecture
-    if (text.contains("building") || text.contains("architecture") || text.contains("city") || text.contains("street") || text.contains("house") || text.contains("urban")) {
+    if (hasAny("building", "architecture", "city", "street", "house", "urban", "bridge", "road")) {
         results.add("Architecture")
     }
 
     // Vehicles
-    if (text.contains("vehicle") || text.contains("car") || text.contains("truck") || text.contains("motorcycle") || text.contains("bicycle") || text.contains("airplane") || text.contains("boat") || text.contains("transport")) {
+    if (hasAny("vehicle", "car", "truck", "motorcycle", "bicycle", "airplane", "boat", "transport", "train", "bus")) {
         results.add("Vehicle")
     }
 
     // Electronics / Tech
-    if (text.contains("electronics") || text.contains("computer") || text.contains("phone") || text.contains("screen") || text.contains("gadget") || text.contains("device") || text.contains("technology")) {
+    if (hasAny("electronics", "computer", "phone", "screen", "gadget", "device", "technology", "laptop", "tv")) {
         results.add("Electronics")
     }
     
     // Furniture / Indoor
-    if (text.contains("furniture") || text.contains("room") || text.contains("indoor") || text.contains("chair") || text.contains("table") || text.contains("bed")) {
+    if (hasAny("furniture", "room", "indoor", "chair", "table", "bed", "couch", "desk", "sofa")) {
         results.add("Indoor")
     }
 
