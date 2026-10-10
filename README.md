@@ -4,9 +4,9 @@ A premium offline Android gallery app with a beautiful liquid glass design syste
 
 ## 📱 Screenshots
 
-| Photos | Albums | Settings | Search |
-|:---:|:---:|:---:|:---:|
-| <img src="https://github.com/user-attachments/assets/23d45392-5ebe-4913-8006-fcc223998ea7" width="220" alt="Photos" /> | <img src="https://github.com/user-attachments/assets/7c3d1b41-c232-415b-9c43-b09915f377d4" width="220" alt="Albums" /> | <img src="https://github.com/user-attachments/assets/2f3318cf-1c50-4e11-8a15-a8f1bb3a4e84" width="165" alt="Settings" /> | <img src="https://github.com/user-attachments/assets/5a2aff02-3bf5-43ae-add2-f02c5598fc05" width="220" alt="Search" /> |
+| Home | Albums | Settings | Search | Editor |
+|:---:|:---:|:---:|:---:|:---:|
+| <img src="https://github.com/user-attachments/assets/01e1d763-45e6-4814-9654-29cf280d68a8" width="200" alt="Home Tab" /> | <img src="https://github.com/user-attachments/assets/dbd8d355-fa0a-4ba0-8a92-021f0753eaa2" width="200" alt="Albums Tab" /> | <img src="https://github.com/user-attachments/assets/8038e583-c52f-47db-a793-4412d01cd9e7" width="200" alt="Settings Tab" /> | <img src="https://github.com/user-attachments/assets/884836ab-63bd-4752-baa6-1239b59c0a97" width="200" alt="Search Tab" /> | <img src="https://github.com/user-attachments/assets/57318ef1-c0b9-40fd-9bed-a114c652c3d1" width="200" alt="Editor Tab" /> |
 
 ## ✨ Features
 
