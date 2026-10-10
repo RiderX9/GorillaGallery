@@ -177,6 +177,7 @@ fun FloatingSideBar(
             onDragStarted = {},
             onDragStopped = {
                 val targetIndex = targetValue.fastRoundToInt().fastCoerceIn(0, tabsCount - 1)
+                currentOnSelected(targetIndex)
                 currentIndex = targetIndex
                 animateToValue(targetIndex.toFloat())
                 animationScope.launch {
@@ -204,7 +205,6 @@ fun FloatingSideBar(
     LaunchedEffect(dampedDragAnimation) {
         snapshotFlow { currentIndex }.drop(1).collectLatest { index ->
             dampedDragAnimation.animateToValue(index.toFloat())
-            currentOnSelected(index)
         }
     }
 

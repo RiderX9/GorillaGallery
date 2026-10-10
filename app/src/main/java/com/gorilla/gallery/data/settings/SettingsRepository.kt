@@ -29,6 +29,7 @@ class SettingsRepository(private val context: Context) {
     private object Keys {
         val themeMode = stringPreferencesKey("theme_mode")
         val accent = stringPreferencesKey("accent")
+        val appIcon = stringPreferencesKey("app_icon")
         val blur = stringPreferencesKey("blur_intensity")
         val liquidGlassIntensity = stringPreferencesKey("liquid_glass_intensity")
         val surfaceOpacity = androidx.datastore.preferences.core.floatPreferencesKey("surface_opacity")
@@ -40,6 +41,7 @@ class SettingsRepository(private val context: Context) {
         val skipConfirmationsAndToasts = booleanPreferencesKey("skip_confirmations_and_toasts")
         val enablePipMode = booleanPreferencesKey("enable_pip_mode")
         val moveToTrashByDefaultForDelete = booleanPreferencesKey("move_to_trash_by_default")
+        val showScrollbar = booleanPreferencesKey("show_scrollbar")
         val secureEnabled = booleanPreferencesKey("secure_enabled")
         val biometricUnlock = booleanPreferencesKey("biometric_unlock")
         val showSecureInAlbums = booleanPreferencesKey("show_secure_in_albums")
@@ -51,6 +53,7 @@ class SettingsRepository(private val context: Context) {
         AppSettings(
             themeMode = p[Keys.themeMode]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.AUTO,
             accent = p[Keys.accent]?.let { runCatching { AccentChoice.valueOf(it) }.getOrNull() } ?: AccentChoice.ADAPTIVE,
+            appIcon = p[Keys.appIcon]?.let { runCatching { AppIconChoice.valueOf(it) }.getOrNull() } ?: AppIconChoice.DEFAULT,
             blurIntensity = p[Keys.blur]?.let { runCatching { BlurIntensity.valueOf(it) }.getOrNull() } ?: BlurIntensity.MEDIUM,
             liquidGlassIntensity = p[Keys.liquidGlassIntensity]?.let { runCatching { BlurIntensity.valueOf(it) }.getOrNull() } ?: BlurIntensity.MEDIUM,
             surfaceOpacity = p[Keys.surfaceOpacity] ?: 0.4f,
@@ -62,6 +65,7 @@ class SettingsRepository(private val context: Context) {
             skipConfirmationsAndToasts = p[Keys.skipConfirmationsAndToasts] ?: false,
             enablePipMode = p[Keys.enablePipMode] ?: false,
             moveToTrashByDefaultForDelete = p[Keys.moveToTrashByDefaultForDelete] ?: true,
+            showScrollbar = p[Keys.showScrollbar] ?: false,
             secureFolderEnabled = p[Keys.secureEnabled] ?: false,
             biometricUnlock = p[Keys.biometricUnlock] ?: true,
             showSecureInAlbums = p[Keys.showSecureInAlbums] ?: true,
@@ -74,6 +78,7 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setThemeMode(v: ThemeMode) = edit { it[Keys.themeMode] = v.name }
     suspend fun setAccent(v: AccentChoice) = edit { it[Keys.accent] = v.name }
+    suspend fun setAppIcon(v: AppIconChoice) = edit { it[Keys.appIcon] = v.name }
     suspend fun setBlurIntensity(v: BlurIntensity) = edit { it[Keys.blur] = v.name }
     suspend fun setLiquidGlassIntensity(v: BlurIntensity) = edit { it[Keys.liquidGlassIntensity] = v.name }
     suspend fun setSurfaceOpacity(v: Float) = edit { it[Keys.surfaceOpacity] = v }
@@ -85,6 +90,7 @@ class SettingsRepository(private val context: Context) {
     suspend fun setSkipConfirmationsAndToasts(v: Boolean) = edit { it[Keys.skipConfirmationsAndToasts] = v }
     suspend fun setEnablePipMode(v: Boolean) = edit { it[Keys.enablePipMode] = v }
     suspend fun setMoveToTrashByDefaultForDelete(v: Boolean) = edit { it[Keys.moveToTrashByDefaultForDelete] = v }
+    suspend fun setShowScrollbar(v: Boolean) = edit { it[Keys.showScrollbar] = v }
 
     suspend fun setSecureFolderEnabled(v: Boolean) = edit { it[Keys.secureEnabled] = v }
     suspend fun setBiometricUnlock(v: Boolean) = edit { it[Keys.biometricUnlock] = v }

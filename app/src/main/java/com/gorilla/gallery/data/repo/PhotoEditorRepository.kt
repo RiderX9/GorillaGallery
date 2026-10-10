@@ -181,8 +181,24 @@ class PhotoEditorRepository(
                 
                 android.util.Log.d("GorillaGallery", "readExif: lat=$lat lon=$lon")
                 val locationName = if (lat != null && lon != null) {
-                    val name = null
-                    android.util.Log.d("GorillaGallery", "readExif: locationName=$name")
+                    var name: String? = null
+                    try {
+                        if (android.location.Geocoder.isPresent()) {
+                            val geocoder = android.location.Geocoder(context, java.util.Locale.getDefault())
+                            val addresses = geocoder.getFromLocation(lat, lon, 1)
+                            if (!addresses.isNullOrEmpty()) {
+                                val addr = addresses[0]
+                                name = addr.locality ?: addr.subAdminArea ?: addr.adminArea ?: addr.countryName
+                                if (name != null && addr.countryName != null && name != addr.countryName) {
+                                    name = "$name, ${addr.countryName}"
+                                } else if (name == null) {
+                                    name = addr.countryName
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("GorillaGallery", "Geocoder failed", e)
+                    }
                     name ?: "$lat, $lon"
                 } else null
                 PhotoExif(

@@ -1,6 +1,7 @@
 package com.gorilla.gallery.ui.screens.albums
 
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.navigationBarsPadding
 
 import androidx.compose.runtime.getValue
@@ -100,7 +101,7 @@ fun TrashScreen(
     val gridBackdrop = com.kyant.backdrop.backdrops.rememberLayerBackdrop()
     androidx.activity.compose.BackHandler(onBack = onBack)
     Box(Modifier.fillMaxSize().background(com.gorilla.gallery.ui.theme.DesignTokens.BgBase)) {
-        Box(Modifier.layerBackdrop(gridBackdrop)) {
+        Box(Modifier.layerBackdrop(gridBackdrop).background(com.gorilla.gallery.ui.theme.DesignTokens.BgBase)) {
             if (items.isEmpty()) {
                 Box(Modifier.fillMaxSize()) {
                     EmptyState(
@@ -138,7 +139,14 @@ fun TrashScreen(
                     MediaGrid(
                     viewerOpen = viewerOpen,
                     focusedItem = focusedItem,
-                        sections = if (currentItems.isEmpty()) emptyList() else listOf(MediaSection("trash", "", currentItems)),
+                        sections = if (currentItems.isEmpty()) emptyList() else if (currentSortMode == "Date Taken" || currentSortMode == "Date Modified") com.gorilla.gallery.ui.screens.timeline.groupByDate(currentItems, settings.dateGranularity, currentSortAscending) else {
+                            val headerLabel = if (settings.dateGranularity == com.gorilla.gallery.data.settings.DateGranularity.ALL) "" else when (currentSortMode) {
+                                "Name (A-Z)" -> if (currentSortAscending) "Name (A-Z)" else "Name (Z-A)"
+                                "File Size" -> if (currentSortAscending) "File Size ↑" else "File Size ↓"
+                                else -> currentSortMode
+                            }
+                            listOf(MediaSection(currentSortMode, headerLabel, currentItems))
+                        },
                         columns = settings.gridColumns,
                         selectionMode = selectionMode,
                         selectedIds = selected,
@@ -196,6 +204,14 @@ fun TrashScreen(
         ) {
             com.gorilla.gallery.ui.components.InternalSelectionActionBar(
                 count = selected.size,
+                allSelected = filteredItems.isNotEmpty() && selected.size == filteredItems.size,
+                onSelectAll = {
+                    if (selected.size == filteredItems.size) {
+                        clearSelection()
+                    } else {
+                        selected = filteredItems.map { it.id }.toSet()
+                    }
+                },
                 onShare = {
                     com.gorilla.gallery.ui.components.shareItems(context, selectedItems)
                 },

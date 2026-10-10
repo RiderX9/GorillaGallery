@@ -1,9 +1,32 @@
 package com.gorilla.gallery.ui.screens.editor
+import androidx.compose.foundation.basicMarquee
+
+import kotlinx.coroutines.launch
+import androidx.compose.ui.draw.blur
+import androidx.compose.foundation.layout.defaultMinSize
+
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.TextFields
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectDragGestures
+
+
+import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectDragGestures
+
 import androidx.compose.ui.draw.alpha
 
 import androidx.compose.runtime.setValue
 
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
@@ -35,10 +58,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import me.saket.telephoto.zoomable.zoomable
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentWidth
+
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -51,8 +77,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Redo
 import androidx.compose.material.icons.rounded.Brush
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Crop
 import androidx.compose.material.icons.rounded.FilterVintage
+import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Flip
 import androidx.compose.material.icons.rounded.Rotate90DegreesCw
 import androidx.compose.material.icons.rounded.Tune
@@ -68,6 +96,8 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
@@ -413,7 +443,20 @@ fun EditorScreen(
                 }
             }
         } else {
+            val originalOnClose = onClose
             var uiVisible by remember { mutableStateOf(false) }
+            val closeScope = androidx.compose.runtime.rememberCoroutineScope()
+            val onClose: () -> Unit = {
+                if (uiVisible) {
+                    uiVisible = false
+                    closeScope.launch {
+                        kotlinx.coroutines.delay(250)
+                        originalOnClose()
+                    }
+                } else {
+                    originalOnClose()
+                }
+            }
             LaunchedEffect(Unit) { uiVisible = true }
             val topOffset by androidx.compose.animation.core.animateDpAsState(if (uiVisible) 0.dp else (-100).dp, androidx.compose.animation.core.tween(400, easing = androidx.compose.animation.core.FastOutSlowInEasing))
             val bottomOffset by androidx.compose.animation.core.animateDpAsState(if (uiVisible) 0.dp else 100.dp, androidx.compose.animation.core.tween(400, easing = androidx.compose.animation.core.FastOutSlowInEasing))
@@ -470,84 +513,149 @@ fun EditorScreen(
             }
 
             // Preview (fills remaining space).
-            var previewScale by remember { mutableFloatStateOf(1f) }
-            var previewOffset by remember { mutableStateOf(Offset.Zero) }
-
+            val zoomableState = me.saket.telephoto.zoomable.rememberZoomableState(
+                zoomSpec = me.saket.telephoto.zoomable.ZoomSpec(maxZoomFactor = 10f)
+            ).apply { contentScale = androidx.compose.ui.layout.ContentScale.None }
+            
             LaunchedEffect(tool, item.uri) {
-                previewScale = 1f
-                previewOffset = Offset.Zero
+                zoomableState.resetZoom(withAnimation = false)
             }
 
-            Box(
+            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            val isZoomed by androidx.compose.runtime.remember {
+                androidx.compose.runtime.derivedStateOf {
+                    zoomableState.contentTransformation.isSpecified &&
+                    zoomableState.contentTransformation.scaleMetadata.userZoom > 1.05f
+                }
+            }
+            androidx.activity.compose.BackHandler {
+                if (isZoomed) {
+                    scope.launch { zoomableState.resetZoom(withAnimation = true) }
+                } else {
+                    onClose()
+                }
+            }
+
+            BoxWithConstraints(
                 modifier = Modifier
                     .align(Alignment.Center)
                     .fillMaxSize()
-                    .padding(
-                        start = if (isLandscape) 120.dp else 32.dp,
-                        end = if (isLandscape) 120.dp else 32.dp,
-                        top = if (isLandscape) 32.dp else 120.dp,
-                        bottom = if (isLandscape) 32.dp else 220.dp
-                    ),
+                    .layerBackdrop(editorBackdrop),
                 contentAlignment = Alignment.Center
             ) {
-                BoxWithConstraints(
-                    modifier = Modifier.fillMaxSize().layerBackdrop(editorBackdrop),
-                    contentAlignment = Alignment.Center
-                ) {
-                    val parentW = maxWidth.value
-                    val parentH = maxHeight.value
+                val fullW = maxWidth.value
+                val fullH = maxHeight.value
 
-                    if (parentW > 0f && parentH > 0f) {
-                        val parentAspect = parentW / parentH
-                        val boxW = if (imageRatio > parentAspect) parentW else (parentH * imageRatio)
-                        val boxH = if (imageRatio > parentAspect) (parentW / imageRatio) else parentH
+                val startPad = if (isLandscape) 120f else 32f
+                val endPad = if (isLandscape) 120f else 32f
+                val topPad = if (isLandscape) 32f else 120f
+                val bottomPad = if (isLandscape) 32f else 220f
 
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .pointerInput(tool) {
-                                    if (tool != Tool.CROP) {
-                                        detectTransformGestures { centroid, pan, zoom, _ ->
-                                            val prevScale = previewScale
-                                            val newScale = (prevScale * zoom).coerceIn(1f, 10f)
-                                            val actualZoom = if (prevScale > 0f) newScale / prevScale else 1f
-                                            previewScale = newScale
-                                            if (previewScale > 1f) {
-                                                val maxX = ((boxW * previewScale) - parentW).coerceAtLeast(0f) / 2f
-                                                val maxY = ((boxH * previewScale) - parentH).coerceAtLeast(0f) / 2f
-                                                val zoomDx = if (!centroid.x.isNaN()) (centroid.x - parentW / 2f) * (1f - actualZoom) else 0f
-                                                val zoomDy = if (!centroid.y.isNaN()) (centroid.y - parentH / 2f) * (1f - actualZoom) else 0f
-                                                previewOffset = Offset(
-                                                    x = (previewOffset.x * actualZoom + pan.x + zoomDx).coerceIn(-maxX, maxX),
-                                                    y = (previewOffset.y * actualZoom + pan.y + zoomDy).coerceIn(-maxY, maxY)
-                                                )
-                                            } else {
-                                                previewOffset = Offset.Zero
-                                            }
-                                        }
-                                    }
-                                }
-                                .pointerInput(tool) {
-                                    if (tool != Tool.CROP) {
-                                        detectTapGestures(
-                                            onDoubleTap = {
-                                                previewScale = 1f
-                                                previewOffset = Offset.Zero
-                                            }
+                val parentW = fullW - startPad - endPad
+                val parentH = fullH - topPad - bottomPad
+
+                if (parentW > 0f && parentH > 0f) {
+                    val parentAspect = parentW / parentH
+                    val boxW = if (imageRatio > parentAspect) parentW else (parentH * imageRatio)
+                    val boxH = if (imageRatio > parentAspect) (parentW / imageRatio) else parentH
+
+                    val density = androidx.compose.ui.platform.LocalDensity.current
+                    LaunchedEffect(boxW, boxH, fullW, fullH) {
+                        if (boxW > 0f && boxH > 0f) {
+                            zoomableState.setContentLocation(
+                                object : me.saket.telephoto.zoomable.ZoomableContentLocation {
+                                    override fun location(
+                                        layoutSize: androidx.compose.ui.geometry.Size,
+                                        direction: androidx.compose.ui.unit.LayoutDirection
+                                    ): androidx.compose.ui.geometry.Rect {
+                                        val startPx = with(density) { startPad.dp.toPx() }
+                                        val endPx = with(density) { endPad.dp.toPx() }
+                                        val topPx = with(density) { topPad.dp.toPx() }
+                                        val bottomPx = with(density) { bottomPad.dp.toPx() }
+
+                                        val padW = layoutSize.width - startPx - endPx
+                                        val padH = layoutSize.height - topPx - bottomPx
+
+                                        val wPx = with(density) { boxW.dp.toPx() }
+                                        val hPx = with(density) { boxH.dp.toPx() }
+
+                                        val imgX = startPx + (padW - wPx) / 2f
+                                        val imgY = topPx + (padH - hPx) / 2f
+
+                                        return androidx.compose.ui.geometry.Rect(
+                                            left = imgX,
+                                            top = imgY,
+                                            right = imgX + wPx,
+                                            bottom = imgY + hPx
                                         )
                                     }
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(boxW.dp, boxH.dp)
-                                    .graphicsLayer {
-                                        scaleX = previewScale
-                                        scaleY = previewScale
-                                        translationX = previewOffset.x
-                                        translationY = previewOffset.y
-                                    }
+                                }
+                            )
+
+                            val startPx = with(density) { startPad.dp.toPx() }
+                            val endPx = with(density) { endPad.dp.toPx() }
+                            val topPx = with(density) { topPad.dp.toPx() }
+                            val bottomPx = with(density) { bottomPad.dp.toPx() }
+                            
+                            val fullWPx = with(density) { fullW.dp.toPx() }
+                            val fullHPx = with(density) { fullH.dp.toPx() }
+
+                            val padW = fullWPx - startPx - endPx
+                            val padH = fullHPx - topPx - bottomPx
+                            val wPx = with(density) { boxW.dp.toPx() }
+                            val hPx = with(density) { boxH.dp.toPx() }
+                            val imgX = startPx + (padW - wPx) / 2f
+                            val imgY = topPx + (padH - hPx) / 2f
+
+                            zoomableState.contentAlignment = object : androidx.compose.ui.Alignment {
+                                override fun align(
+                                    size: androidx.compose.ui.unit.IntSize,
+                                    space: androidx.compose.ui.unit.IntSize,
+                                    layoutDirection: androidx.compose.ui.unit.LayoutDirection
+                                ): androidx.compose.ui.unit.IntOffset {
+                                    val progressX = if (space.width > wPx) {
+                                        (size.width.toFloat() - wPx) / (space.width - wPx)
+                                    } else 0f
+                                    
+                                    val progressY = if (space.height > hPx) {
+                                        (size.height.toFloat() - hPx) / (space.height - hPx)
+                                    } else 0f
+                                    
+                                    val clampedX = progressX.coerceIn(0f, 1f)
+                                    val clampedY = progressY.coerceIn(0f, 1f)
+                                    
+                                    val targetX = imgX * (1f - clampedX)
+                                    val targetY = imgY * (1f - clampedY)
+                                    
+                                    return androidx.compose.ui.unit.IntOffset(targetX.toInt(), targetY.toInt())
+                                }
+                            }
+                        }
+                    }
+
+                    val zoomModifier = if (tool != Tool.CROP) {
+                        Modifier.zoomable(
+                            state = zoomableState,
+                            onDoubleClick = me.saket.telephoto.zoomable.DoubleClickToZoomListener.cycle(2.5f),
+                            clipToBounds = false
+                        )
+                    } else Modifier
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .then(zoomModifier)
+                            .padding(
+                                start = startPad.dp,
+                                end = endPad.dp,
+                                top = topPad.dp,
+                                bottom = bottomPad.dp
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(boxW.dp, boxH.dp)
                                     .then(
                                         if (tool != Tool.CROP && tool != Tool.DOODLE) {
                                             Modifier.pressAndHoldOriginalPreview(
@@ -629,7 +737,7 @@ fun EditorScreen(
 
                                                 val offsetX = (containerSize.width - renderedWidth) / 2f
                                                 val offsetY = (containerSize.height - renderedHeight) / 2f
-                                                val topLeft = coords.localToWindow(Offset(offsetX, offsetY))
+                                                val topLeft = Offset(offsetX, offsetY)
 
                                                 vm.imageRenderedBounds = androidx.compose.ui.geometry.Rect(
                                                     offset = topLeft,
@@ -679,22 +787,13 @@ fun EditorScreen(
                                 )
                             }
 
-                            val overlay = vm.overlayBitmap.value
-                            if (!showOriginalPreview && overlay != null && tool != Tool.DOODLE) {
-                                androidx.compose.foundation.Image(
-                                    bitmap = overlay,
-                                    contentDescription = null,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            }
-
-                            if (!showOriginalPreview && tool == Tool.DOODLE) {
-                                DoodleCanvas(
-                                    vm = vm,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            }
-                        }
+                            DoodleCanvas(
+                                vm = vm,
+                                isInteractive = (tool == Tool.DOODLE && !showOriginalPreview),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer { alpha = if (showOriginalPreview) 0f else 1f }
+                            )
                         }
                     }
                 }
@@ -749,13 +848,13 @@ fun EditorScreen(
                                     PhotoEditorMode.DOODLE -> {
                                         DoodleControls(
                                             vm = vm,
-                                            modifier = Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 10.dp)
+                                            modifier = Modifier.fillMaxWidth().wrapContentHeight().padding(horizontal = 10.dp)
                                         )
                                     }
                                     PhotoEditorMode.FILTERS -> {
                                         val listState = androidx.compose.foundation.lazy.rememberLazyListState()
                                         LazyRow(
-                                            modifier = Modifier.fillMaxWidth().height(64.dp).softHorizontalScrollEdges(listState),
+                                            modifier = Modifier.fillMaxWidth().wrapContentHeight().softHorizontalScrollEdges(listState),
                                             state = listState,
                                             horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
                                             verticalAlignment = Alignment.CenterVertically,
@@ -772,64 +871,103 @@ fun EditorScreen(
                                         }
                                     }
                                     PhotoEditorMode.CROP -> {
-                                        val scrollState = rememberScrollState()
-                                        Row(
-                                            Modifier.fillMaxWidth().height(64.dp).softHorizontalScrollEdges(scrollState).horizontalScroll(scrollState),
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                            verticalAlignment = Alignment.CenterVertically
+                                        Column(
+                                            Modifier.width(androidx.compose.foundation.layout.IntrinsicSize.Max).padding(horizontal = 10.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp),
                                         ) {
-                                            Spacer(Modifier.width(2.dp))
-                                            CropAspect.entries.filter { it != CropAspect.ORIGINAL }.forEach { aspect ->
-                                                ToolChip(label = aspect.label, selected = edit.cropAspect == aspect) {
-                                                    setEditState(edit.copy(cropAspect = aspect))
-                                                    val currentRect = vm.cropRect.value
-                                                    if (currentRect != null && containerW > 0 && containerH > 0) {
-                                                        val snapped = snapToAspect(
-                                                            current = currentRect,
-                                                            aspect = aspect,
-                                                            imageWidth = containerW,
-                                                            imageHeight = containerH
-                                                        )
-                                                        vm.setCropRect(snapped)
+                                            Row(
+                                                Modifier.padding(horizontal = 2.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            ) {
+                                                CropAspect.entries.filter { it != CropAspect.ORIGINAL }.forEach { aspect ->
+                                                    FeaturePill(
+                                                        icon = { tint ->
+                                                            Icon(
+                                                                Icons.Rounded.Crop,
+                                                                contentDescription = null,
+                                                                tint = tint,
+                                                                modifier = Modifier.size(16.dp),
+                                                            )
+                                                        },
+                                                        label = aspect.label,
+                                                        selected = edit.cropAspect == aspect,
+                                                    ) {
+                                                        setEditState(edit.copy(cropAspect = aspect))
+                                                        val currentRect = vm.cropRect.value
+                                                        if (currentRect != null && containerW > 0 && containerH > 0) {
+                                                            val snapped = snapToAspect(
+                                                                current = currentRect,
+                                                                aspect = aspect,
+                                                                imageWidth = containerW,
+                                                                imageHeight = containerH
+                                                            )
+                                                            vm.setCropRect(snapped)
+                                                        }
                                                     }
                                                 }
                                             }
-                                            Spacer(Modifier.width(6.dp))
-                                            Box(
-                                                modifier = Modifier
-                                                    .clip(CapsuleShape)
-                                                    .background(accent.copy(alpha = 0.18f))
-                                                    .clickable(
-                                                        interactionSource = remember { MutableInteractionSource() },
-                                                        indication = null,
-                                                        onClick = {
-                                                            val currentRect = vm.cropRect.value
-                                                            if (currentRect != null && containerW > 0f && containerH > 0f) {
-                                                                vm.applyCrop(
-                                                                    cropLeft = (currentRect.left / containerW).coerceIn(0f, 1f),
-                                                                    cropTop = (currentRect.top / containerH).coerceIn(0f, 1f),
-                                                                    cropRight = (currentRect.right / containerW).coerceIn(0f, 1f),
-                                                                    cropBottom = (currentRect.bottom / containerH).coerceIn(0f, 1f),
-                                                                    onSuccess = {
-                                                                        previousCropState = null
-                                                                        tool = null
-                                                                        mode = PhotoEditorMode.EDIT
-                                                                        openMode = PhotoEditorMode.EDIT
-                                                                    },
-                                                                    onFailure = { msg ->
-                                                                        android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
-                                                                    }
-                                                                )
-                                                            } else {
-                                                                android.widget.Toast.makeText(context, "Select a crop area first", android.widget.Toast.LENGTH_SHORT).show()
-                                                            }
-                                                        }
-                                                    )
-                                                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                                            Row(
+                                                Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                                             ) {
-                                                Text("Apply", color = accent, fontWeight = FontWeight.Bold)
+                                                val isOverlayModified = vm.cropRect.value?.let { rect ->
+                                                    rect.left > 1f || rect.top > 1f || rect.right < containerW - 1f || rect.bottom < containerH - 1f
+                                                } ?: false
+                                                val canReset = edit.cropAspect != CropAspect.FREE || isOverlayModified
+                                                FeaturePill(
+                                                    icon = { tint ->
+                                                        Icon(
+                                                            Icons.Rounded.RestartAlt,
+                                                            contentDescription = null,
+                                                            tint = tint,
+                                                            modifier = Modifier.size(16.dp),
+                                                        )
+                                                    },
+                                                    label = "Reset",
+                                                    selected = false,
+                                                    enabled = canReset,
+                                                    modifier = Modifier.weight(1f),
+                                                    onClick = {
+                                                        setEditState(edit.copy(cropAspect = CropAspect.FREE))
+                                                        vm.setCropRect(androidx.compose.ui.geometry.Rect(0f, 0f, containerW, containerH))
+                                                    }
+                                                )
+                                                FeaturePill(
+                                                    icon = { tint ->
+                                                        Icon(
+                                                            Icons.Rounded.Check,
+                                                            contentDescription = null,
+                                                            tint = tint,
+                                                            modifier = Modifier.size(16.dp),
+                                                        )
+                                                    },
+                                                    label = "Apply ${edit.cropAspect.label}",
+                                                    selected = true,
+                                                    modifier = Modifier.weight(1f),
+                                                    onClick = {
+                                                        val currentRect = vm.cropRect.value
+                                                        if (currentRect != null && containerW > 0f && containerH > 0f) {
+                                                            vm.applyCrop(
+                                                                cropLeft = (currentRect.left / containerW).coerceIn(0f, 1f),
+                                                                cropTop = (currentRect.top / containerH).coerceIn(0f, 1f),
+                                                                cropRight = (currentRect.right / containerW).coerceIn(0f, 1f),
+                                                                cropBottom = (currentRect.bottom / containerH).coerceIn(0f, 1f),
+                                                                onSuccess = {
+                                                                    previousCropState = null
+                                                                    tool = null
+                                                                    mode = PhotoEditorMode.EDIT
+                                                                    openMode = PhotoEditorMode.EDIT
+                                                                },
+                                                                onFailure = { msg ->
+                                                                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                                                                }
+                                                            )
+                                                        } else {
+                                                            android.widget.Toast.makeText(context, "Select a crop area first", android.widget.Toast.LENGTH_SHORT).show()
+                                                        }
+                                                    },
+                                                )
                                             }
-                                            Spacer(Modifier.width(2.dp))
                                         }
                                     }
                                 }
@@ -872,13 +1010,13 @@ fun EditorScreen(
                                     PhotoEditorMode.DOODLE -> {
                                         DoodleControls(
                                             vm = vm,
-                                            modifier = Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 10.dp)
+                                            modifier = Modifier.fillMaxWidth().wrapContentHeight().padding(horizontal = 10.dp)
                                         )
                                     }
                                     PhotoEditorMode.FILTERS -> {
                                         val listState = androidx.compose.foundation.lazy.rememberLazyListState()
                                         LazyRow(
-                                            modifier = Modifier.fillMaxWidth().height(64.dp).softHorizontalScrollEdges(listState),
+                                            modifier = Modifier.fillMaxWidth().wrapContentHeight().softHorizontalScrollEdges(listState),
                                             state = listState,
                                             horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
                                             verticalAlignment = Alignment.CenterVertically,
@@ -895,64 +1033,108 @@ fun EditorScreen(
                                         }
                                     }
                                     PhotoEditorMode.CROP -> {
-                                        val scrollState = rememberScrollState()
-                                        Row(
-                                            Modifier.fillMaxWidth().height(64.dp).softHorizontalScrollEdges(scrollState).horizontalScroll(scrollState),
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                            verticalAlignment = Alignment.CenterVertically
+                                        Column(
+                                            Modifier.fillMaxWidth().padding(horizontal = 10.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp),
                                         ) {
-                                            Spacer(Modifier.width(2.dp))
-                                            CropAspect.entries.filter { it != CropAspect.ORIGINAL }.forEach { aspect ->
-                                                ToolChip(label = aspect.label, selected = edit.cropAspect == aspect) {
-                                                    setEditState(edit.copy(cropAspect = aspect))
-                                                    val currentRect = vm.cropRect.value
-                                                    if (currentRect != null && containerW > 0 && containerH > 0) {
-                                                        val snapped = snapToAspect(
-                                                            current = currentRect,
-                                                            aspect = aspect,
-                                                            imageWidth = containerW,
-                                                            imageHeight = containerH
-                                                        )
-                                                        vm.setCropRect(snapped)
+                                            val scrollState = rememberScrollState()
+                                            Row(
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .softHorizontalScrollEdges(scrollState)
+                                                    .horizontalScroll(scrollState)
+                                                    .padding(horizontal = 2.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            ) {
+                                                CropAspect.entries.filter { it != CropAspect.ORIGINAL }.forEach { aspect ->
+                                                    FeaturePill(
+                                                        icon = { tint ->
+                                                            Icon(
+                                                                Icons.Rounded.Crop,
+                                                                contentDescription = null,
+                                                                tint = tint,
+                                                                modifier = Modifier.size(16.dp),
+                                                            )
+                                                        },
+                                                        label = aspect.label,
+                                                        selected = edit.cropAspect == aspect,
+                                                    ) {
+                                                        setEditState(edit.copy(cropAspect = aspect))
+                                                        val currentRect = vm.cropRect.value
+                                                        if (currentRect != null && containerW > 0 && containerH > 0) {
+                                                            val snapped = snapToAspect(
+                                                                current = currentRect,
+                                                                aspect = aspect,
+                                                                imageWidth = containerW,
+                                                                imageHeight = containerH
+                                                            )
+                                                            vm.setCropRect(snapped)
+                                                        }
                                                     }
                                                 }
                                             }
-                                            Spacer(Modifier.width(6.dp))
-                                            Box(
-                                                modifier = Modifier
-                                                    .clip(CapsuleShape)
-                                                    .background(accent.copy(alpha = 0.18f))
-                                                    .clickable(
-                                                        interactionSource = remember { MutableInteractionSource() },
-                                                        indication = null,
-                                                        onClick = {
-                                                            val currentRect = vm.cropRect.value
-                                                            if (currentRect != null && containerW > 0f && containerH > 0f) {
-                                                                vm.applyCrop(
-                                                                    cropLeft = (currentRect.left / containerW).coerceIn(0f, 1f),
-                                                                    cropTop = (currentRect.top / containerH).coerceIn(0f, 1f),
-                                                                    cropRight = (currentRect.right / containerW).coerceIn(0f, 1f),
-                                                                    cropBottom = (currentRect.bottom / containerH).coerceIn(0f, 1f),
-                                                                    onSuccess = {
-                                                                        previousCropState = null
-                                                                        tool = null
-                                                                        mode = PhotoEditorMode.EDIT
-                                                                        openMode = PhotoEditorMode.EDIT
-                                                                    },
-                                                                    onFailure = { msg ->
-                                                                        android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
-                                                                    }
-                                                                )
-                                                            } else {
-                                                                android.widget.Toast.makeText(context, "Select a crop area first", android.widget.Toast.LENGTH_SHORT).show()
-                                                            }
-                                                        }
-                                                    )
-                                                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                                            Row(
+                                                Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                                             ) {
-                                                Text("Apply", color = accent, fontWeight = FontWeight.Bold)
+                                                val isOverlayModified = vm.cropRect.value?.let { rect ->
+                                                    rect.left > 1f || rect.top > 1f || rect.right < containerW - 1f || rect.bottom < containerH - 1f
+                                                } ?: false
+                                                val canReset = edit.cropAspect != CropAspect.FREE || isOverlayModified
+                                                FeaturePill(
+                                                    icon = { tint ->
+                                                        Icon(
+                                                            Icons.Rounded.RestartAlt,
+                                                            contentDescription = null,
+                                                            tint = tint,
+                                                            modifier = Modifier.size(16.dp),
+                                                        )
+                                                    },
+                                                    label = "Reset",
+                                                    selected = false,
+                                                    enabled = canReset,
+                                                    modifier = Modifier.weight(1f),
+                                                    onClick = {
+                                                        setEditState(edit.copy(cropAspect = CropAspect.FREE))
+                                                        vm.setCropRect(androidx.compose.ui.geometry.Rect(0f, 0f, containerW, containerH))
+                                                    }
+                                                )
+                                                FeaturePill(
+                                                    icon = { tint ->
+                                                        Icon(
+                                                            Icons.Rounded.Check,
+                                                            contentDescription = null,
+                                                            tint = tint,
+                                                            modifier = Modifier.size(16.dp),
+                                                        )
+                                                    },
+                                                    label = "Apply ${edit.cropAspect.label}",
+                                                    selected = true,
+                                                    modifier = Modifier.weight(1f),
+                                                    onClick = {
+                                                        val currentRect = vm.cropRect.value
+                                                        if (currentRect != null && containerW > 0f && containerH > 0f) {
+                                                            vm.applyCrop(
+                                                                cropLeft = (currentRect.left / containerW).coerceIn(0f, 1f),
+                                                                cropTop = (currentRect.top / containerH).coerceIn(0f, 1f),
+                                                                cropRight = (currentRect.right / containerW).coerceIn(0f, 1f),
+                                                                cropBottom = (currentRect.bottom / containerH).coerceIn(0f, 1f),
+                                                                onSuccess = {
+                                                                    previousCropState = null
+                                                                    tool = null
+                                                                    mode = PhotoEditorMode.EDIT
+                                                                    openMode = PhotoEditorMode.EDIT
+                                                                },
+                                                                onFailure = { msg ->
+                                                                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                                                                }
+                                                            )
+                                                        } else {
+                                                            android.widget.Toast.makeText(context, "Select a crop area first", android.widget.Toast.LENGTH_SHORT).show()
+                                                        }
+                                                    },
+                                                )
                                             }
-                                            Spacer(Modifier.width(2.dp))
                                         }
                                     }
                                     }
@@ -1012,11 +1194,6 @@ fun EditorScreen(
         }
         }
 
-        if (saving) {
-            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = accent)
-            }
-        }
     }
 
     if (showSaveOptions) {
@@ -1207,7 +1384,7 @@ fun PhotoUndoRedoPill(
                 Modifier
                     .width(1.dp)
                     .height(16.dp)
-                    .background(Color.White.copy(alpha = 0.12f)),
+                    .background(com.gorilla.gallery.ui.theme.LocalDynamicColors.current.accent.copy(alpha = 0.12f)),
             )
             HeaderPillIcon(
                 enabled = canRedo,
@@ -1642,11 +1819,11 @@ private fun RotateControlRow(
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
-                .height(30.dp)
+                .height(32.dp)
                 .width(52.dp)
                 .pressScale(scale = 0.88f)
                 .clip(CapsuleShape)
-                .background(Color.White.copy(alpha = 0.12f))
+                .background(com.gorilla.gallery.ui.theme.LocalDynamicColors.current.accent.copy(alpha = 0.12f))
                 .border(1.dp, Color.White.copy(alpha = 0.2f), CapsuleShape)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
@@ -1671,11 +1848,11 @@ private fun RotateControlRow(
         )
         Box(
             modifier = Modifier
-                .height(30.dp)
+                .height(32.dp)
                 .width(52.dp)
                 .pressScale(scale = 0.88f)
                 .clip(CapsuleShape)
-                .background(Color.White.copy(alpha = 0.12f))
+                .background(com.gorilla.gallery.ui.theme.LocalDynamicColors.current.accent.copy(alpha = 0.12f))
                 .border(1.dp, Color.White.copy(alpha = 0.2f), CapsuleShape)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
@@ -1715,7 +1892,7 @@ private fun EditOptionSelector(
             val isSelected = option == selected
             Box(
                 Modifier
-                    .height(30.dp)
+                    .height(32.dp)
                     .pressScale(scale = 0.94f)
                     .clip(CapsuleShape)
                     .background(if (isSelected) accent.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.04f))
@@ -1893,22 +2070,34 @@ private fun FilterChip(
     
     Box(
         modifier = Modifier
-            .height(64.dp)
-            .pressScale(interaction, pressedScale = 0.94f)
+            .width(60.dp)
+            .pressScale(interaction, pressedScale = 0.95f)
+            .clip(RoundedCornerShape(20.dp))
+            .background(if (selected) accent.copy(alpha = 0.1f) else Color.White.copy(alpha = 0.04f))
+            .border(
+                width = 1.dp,
+                color = if (selected) accent.copy(alpha = 0.45f) else Color.White.copy(alpha = 0.08f),
+                shape = RoundedCornerShape(20.dp)
+            )
             .clickable(interaction, indication = null) { haptic(); onClick() }
-            .kernelSuGlassBackdrop(shape = RoundedCornerShape(DesignTokens.RadiusChip))
     ) {
         Column(
             modifier = Modifier
-                .padding(horizontal = 12.dp, vertical = 6.dp)
-                .fillMaxHeight(),
+                .fillMaxWidth()
+                .padding(start = 4.dp, end = 4.dp, top = 6.dp, bottom = 2.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically)
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .size(34.dp)
-                    .clip(CircleShape)
+                    .size(width = 44.dp, height = 54.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color.Black)
+                    .border(
+                        width = 1.dp,
+                        color = if (selected) accent else Color.White.copy(alpha = 0.12f),
+                        shape = RoundedCornerShape(14.dp)
+                    )
             ) {
                 AsyncImage(
                     model = imageUri,
@@ -1920,10 +2109,16 @@ private fun FilterChip(
             }
             Text(
                 text = preset.label,
-                color = if (selected) accent else DesignTokens.TextSecondary,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1
+                color = if (selected) accent else com.gorilla.gallery.ui.theme.DesignTokens.TextSecondary,
+                fontSize = 11.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+                letterSpacing = (-0.01).sp,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 2.dp)
             )
         }
     }
@@ -1995,60 +2190,357 @@ internal fun Modifier.pressAndHoldOriginalPreview(
 @Composable
 private fun DoodleCanvas(
     vm: EditorViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isInteractive: Boolean = true
 ) {
-    Box(
+    var canvasCoords by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
+    val view = androidx.compose.ui.platform.LocalView.current
+    var currentPath = androidx.compose.runtime.remember { androidx.compose.ui.graphics.Path() }
+    var redrawCounter by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    var isDrawing by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    var currentPaint by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<androidx.compose.ui.graphics.Paint?>(null) }
+    
+    androidx.compose.foundation.layout.BoxWithConstraints(
         modifier = modifier
-            .pointerInput(Unit) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val down = awaitFirstDown()
-                        
-                        val paint = androidx.compose.ui.graphics.Paint().apply {
-                            color = vm.currentColor.value
-                            strokeWidth = vm.currentStrokeWidth.value
-                            style = androidx.compose.ui.graphics.PaintingStyle.Stroke
-                            strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
-                            strokeJoin = androidx.compose.ui.graphics.StrokeJoin.Round
-                            if (vm.currentColor.value == androidx.compose.ui.graphics.Color.Transparent) {
-                                blendMode = androidx.compose.ui.graphics.BlendMode.Clear
-                            }
+            .onGloballyPositioned { canvasCoords = it }
+            .then(if (isInteractive) {
+                Modifier.pointerInput(vm.isTextMode.value, vm.floatingTexts.size) {
+                if (vm.isTextMode.value) {
+                    detectTapGestures { offset ->
+                        if (vm.floatingTexts.isNotEmpty()) {
+                            vm.isTextMode.value = false
+                            vm.activeTextIndex.intValue = -1
+                        } else {
+                            // no-op, user creates text via bottom bar
                         }
-                        
-                        var prevPos = down.position
-                        var isMultiTouch = false
-                        var snapshotSaved = false
-                        do {
-                            val event = awaitPointerEvent()
-                            if (event.changes.size > 1) {
-                                isMultiTouch = true
-                            }
+                    }
+                } else {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val down = awaitFirstDown()
                             
-                            val change = event.changes.firstOrNull { it.id == down.id }
-                            if (change == null) break
-                            
-                            if (!isMultiTouch) {
-                                if (!snapshotSaved) {
-                                    vm.saveSnapshot()
-                                    snapshotSaved = true
+                            val paint = androidx.compose.ui.graphics.Paint().apply {
+                                val isPencil = vm.activeDoodleTool.value == "PENCIL"
+                                color = if (isPencil) vm.currentColor.value.copy(alpha = 0.5f) else vm.currentColor.value
+                                strokeWidth = if (isPencil) (vm.currentStrokeWidth.value * 1.5f).coerceAtLeast(2f) else vm.currentStrokeWidth.value
+                                style = androidx.compose.ui.graphics.PaintingStyle.Stroke
+                                strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+                                strokeJoin = androidx.compose.ui.graphics.StrokeJoin.Round
+                                if (vm.currentColor.value == androidx.compose.ui.graphics.Color.Transparent) {
+                                    blendMode = androidx.compose.ui.graphics.BlendMode.Clear
                                 }
-                                change.consume()
-                                
-                                val currPos = change.position
-                                vm.drawSegment(prevPos.x, prevPos.y, currPos.x, currPos.y, paint)
-                                prevPos = currPos
                             }
-                        } while (event.changes.any { it.pressed })
+                            
+                            var prevPos = down.position
+                            var isMultiTouch = false
+                            var snapshotSaved = false
+                            
+                            currentPath.reset()
+                            currentPath.moveTo(prevPos.x, prevPos.y)
+                            currentPaint = paint
+                            isDrawing = true
+                            
+                            do {
+                                val event = awaitPointerEvent()
+                                if (event.changes.size > 1) {
+                                    isMultiTouch = true
+                                }
+                                
+                                val change = event.changes.firstOrNull { it.id == down.id }
+                                if (change == null) break
+                                
+                                if (!isMultiTouch) {
+                                    if (vm.currentColor.value != Color.Unspecified) {
+                                        if (!snapshotSaved) {
+                                            vm.saveSnapshot()
+                                            snapshotSaved = true
+                                        }
+                                        change.consume()
+                                        
+                                        val currPos = change.position
+                                        // Use quadratic bezier for smooth curves
+                                        currentPath.quadraticBezierTo(prevPos.x, prevPos.y, (prevPos.x + currPos.x) / 2, (prevPos.y + currPos.y) / 2)
+                                        redrawCounter++
+                                        prevPos = currPos
+                                    }
+                                }
+                            } while (event.changes.any { it.pressed })
+                            
+                            if (!isMultiTouch && snapshotSaved) {
+                                currentPath.lineTo(prevPos.x, prevPos.y)
+                                vm.drawPath(currentPath, paint)
+                            }
+                            isDrawing = false
+                            currentPaint = null
+                        }
                     }
                 }
             }
+            } else Modifier)
     ) {
         val overlay = vm.overlayBitmap.value
-        if (overlay != null) {
-            androidx.compose.foundation.Image(
-                bitmap = overlay,
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier.fillMaxSize().graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
+        ) {
+            if (overlay != null) {
+                androidx.compose.foundation.Image(
+                    bitmap = overlay,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            
+            if (isDrawing && currentPaint != null) {
+                androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                    val count = redrawCounter
+                    drawContext.canvas.drawPath(currentPath, currentPaint!!)
+                }
+            }
+        }
+
+        vm.floatingTexts.forEachIndexed { index, ft ->
+            androidx.compose.runtime.key(index) {
+                var textWidth by remember { mutableStateOf(0) }
+                var textHeight by remember { mutableStateOf(0) }
+                val density = androidx.compose.ui.platform.LocalDensity.current.density
+                val paddingPx = 16f * density
+                val isEditingThis = isInteractive && vm.isTextMode.value && vm.activeTextIndex.intValue == index
+                val maxW = constraints.maxWidth.toFloat()
+                val maxH = constraints.maxHeight.toFloat()
+                val maxWdp = maxWidth
+
+
+                Box(
+                    modifier = Modifier
+                        .offset { 
+                            androidx.compose.ui.unit.IntOffset(
+                                (ft.offset.x - textWidth / 2f).toInt(),
+                                (ft.offset.y - textHeight / 2f).toInt()
+                            )
+                        }
+                        .graphicsLayer { rotationZ = ft.rotation }
+                        .onGloballyPositioned { coords ->
+                            textWidth = coords.size.width
+                            textHeight = coords.size.height
+                        }
+                ) {
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = ft.text,
+                        onValueChange = { vm.floatingTexts[index] = ft.copy(text = it) },
+                        enabled = isEditingThis,
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(Color.White),
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            color = ft.color,
+                            fontSize = with(androidx.compose.ui.platform.LocalDensity.current) { (ft.scale * 10f * 4f).toSp() },
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            fontFamily = ft.fontFamily,
+                            fontWeight = ft.fontWeight
+                        ),
+                        modifier = Modifier
+                            .widthIn(max = maxWdp)
+                            .width(androidx.compose.foundation.layout.IntrinsicSize.Max)
+                            .padding(16.dp)
+                            .then(
+                                if (isEditingThis) {
+                                    Modifier
+                                        .border(1.dp, Color.White, androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
+                                        .padding(8.dp)
+                                        .pointerInput(Unit) {
+                                            detectDragGestures { change, dragAmount ->
+                                                change.consume()
+                                                val old = vm.floatingTexts[index]
+                                                val angleRad = Math.toRadians(old.rotation.toDouble())
+                                                val cos = kotlin.math.cos(angleRad).toFloat()
+                                                val sin = kotlin.math.sin(angleRad).toFloat()
+                                                val absCos = kotlin.math.abs(cos)
+                                                val absSin = kotlin.math.abs(sin)
+                                                val boundingW = textWidth * absCos + textHeight * absSin
+                                                val boundingH = textWidth * absSin + textHeight * absCos
+                                                val halfW = boundingW / 2f
+                                                val halfH = boundingH / 2f
+                                                
+                                                val screenDx = dragAmount.x * cos - dragAmount.y * sin
+                                                val screenDy = dragAmount.x * sin + dragAmount.y * cos
+                                                val screenDragAmount = androidx.compose.ui.geometry.Offset(screenDx, screenDy)
+                                                
+                                                val newOffset = old.offset + screenDragAmount
+                                                val margin = 32f * density
+                                                val minX = -margin + halfW
+                                                val maxX = maxW + margin - halfW
+                                                val minY = -margin + halfH
+                                                val maxY = maxH + margin - halfH
+                                                val clampedX = if (minX <= maxX) newOffset.x.coerceIn(minX, maxX) else maxW / 2f
+                                                val clampedY = if (minY <= maxY) newOffset.y.coerceIn(minY, maxY) else maxH / 2f
+                                                vm.floatingTexts[index] = old.copy(offset = androidx.compose.ui.geometry.Offset(clampedX, clampedY))
+                                            }
+                                        }
+                                } else {
+                                    Modifier
+                                        .padding(8.dp)
+                                        .then(if (isInteractive) {
+                                            Modifier.pointerInput(Unit) {
+                                                detectTapGestures {
+                                                    vm.isTextMode.value = true
+                                                    vm.activeTextIndex.intValue = index
+                                                }
+                                            }
+                                        } else Modifier)
+                                }
+                            )
+                    )
+                    
+                    if (isEditingThis) {
+                        // Delete Handle
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .size(24.dp)
+                                .background(Color.Red, androidx.compose.foundation.shape.CircleShape)
+                                .clickable {
+                                    vm.floatingTexts.removeAt(index)
+                                    vm.activeTextIndex.intValue = -1
+                                    vm.isTextMode.value = false
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            androidx.compose.material3.Icon(
+                                imageVector = androidx.compose.material.icons.Icons.Default.Close,
+                                contentDescription = "Delete Text",
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+
+                        // Resize Handle
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .size(24.dp)
+                                .background(Color.White, androidx.compose.foundation.shape.CircleShape)
+                                .pointerInput(Unit) {
+                                    detectDragGestures { change, dragAmount ->
+                                        change.consume()
+                                        val old = vm.floatingTexts[index]
+                                        val scaleChange = 1f + (dragAmount.x / 100f)
+                                        val newScale = (old.scale * scaleChange).coerceIn(0.5f, 10f)
+                                        if (newScale > old.scale) {
+                                            if (textWidth - 2 * paddingPx >= maxW ||
+                                                textHeight - 2 * paddingPx >= maxH) {
+                                                return@detectDragGestures
+                                            }
+                                        }
+                                        vm.floatingTexts[index] = old.copy(scale = newScale)
+                                    }
+                                }
+                        )
+
+                        // Rotate Handle
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .size(24.dp)
+                                .background(Color.White, androidx.compose.foundation.shape.CircleShape)
+                                .pointerInput(Unit) {
+                                    var accumulateRotation = 0f
+                                    detectDragGestures(
+                                        onDragStart = { 
+                                            accumulateRotation = vm.floatingTexts[index].rotation 
+                                        }
+                                    ) { change, dragAmount ->
+                                        change.consume()
+                                        val rotationChange = -(dragAmount.y / 2f) - (dragAmount.x / 2f)
+                                        accumulateRotation = (accumulateRotation + rotationChange) % 360f
+                                        if (accumulateRotation < 0f) accumulateRotation += 360f
+                                        
+                                        var snappedRotation = accumulateRotation
+                                        val snapThreshold = 10f
+                                        if (kotlin.math.abs(accumulateRotation) < snapThreshold || kotlin.math.abs(accumulateRotation - 360f) < snapThreshold) {
+                                            snappedRotation = 0f
+                                        } else if (kotlin.math.abs(accumulateRotation - 90f) < snapThreshold) {
+                                            snappedRotation = 90f
+                                        } else if (kotlin.math.abs(accumulateRotation - 180f) < snapThreshold) {
+                                            snappedRotation = 180f
+                                        } else if (kotlin.math.abs(accumulateRotation - 270f) < snapThreshold) {
+                                            snappedRotation = 270f
+                                        }
+                                        
+                                        vm.floatingTexts[index] = vm.floatingTexts[index].copy(rotation = snappedRotation)
+                                    }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            androidx.compose.material3.Icon(
+                                imageVector = androidx.compose.material.icons.Icons.Rounded.Rotate90DegreesCw,
+                                contentDescription = "Rotate Text",
+                                tint = Color.Black,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private enum class DoodleSubTool { PEN, PENCIL, ERASER }
+
+@Composable
+private fun DoodleToolItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector?,
+    isActive: Boolean,
+    onClick: () -> Unit,
+    isEraserShape: Boolean = false
+) {
+    val accentColor = com.gorilla.gallery.ui.theme.LocalDynamicColors.current.accent
+    Box(
+        modifier = Modifier
+            .size(30.dp, 24.dp)
+            .pressScale(scale = 0.94f)
+            .clickable(
+                interactionSource = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        if (isEraserShape) {
+            androidx.compose.foundation.Canvas(modifier = Modifier.size(15.dp)) {
+                val w = size.width
+                val h = size.height
+                rotate(45f) {
+                    val rectW = w * 0.45f
+                    val rectH = h * 0.8f
+                    val left = (w - rectW) / 2
+                    val top = (h - rectH) / 2
+                    val path = androidx.compose.ui.graphics.Path().apply {
+                        addRoundRect(
+                            androidx.compose.ui.geometry.RoundRect(
+                                left = left, top = top, right = left + rectW, bottom = top + rectH,
+                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.1f)
+                            )
+                        )
+                    }
+                    clipPath(path) {
+                        drawRect(
+                            color = if (isActive) accentColor else Color.White.copy(alpha = 0.55f),
+                            topLeft = androidx.compose.ui.geometry.Offset(left, top + rectH * 0.45f),
+                            size = androidx.compose.ui.geometry.Size(rectW, rectH * 0.55f)
+                        )
+                    }
+                    drawPath(
+                        path = path,
+                        color = if (isActive) accentColor else Color.White.copy(alpha = 0.55f),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = w * 0.08f)
+                    )
+                }
+            }
+        } else {
+            androidx.compose.material3.Icon(
+                imageVector = icon!!,
                 contentDescription = null,
-                modifier = Modifier.fillMaxSize()
+                tint = if (isActive) accentColor else Color.White.copy(alpha = 0.55f),
+                modifier = Modifier.size(15.dp)
             )
         }
     }
@@ -2061,84 +2553,336 @@ private fun DoodleControls(
 ) {
     val activeColor = vm.currentColor.value
     val strokeWidth = vm.currentStrokeWidth.value
-    val colors = listOf(Color.Red, Color.Yellow, Color.Blue, Color.Transparent)
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+    var lastUsedColor by remember { mutableStateOf(if (activeColor != Color.Transparent && activeColor != Color.Unspecified) activeColor else Color(0xFF34D399)) }
+    var showColorPicker by remember { mutableStateOf(false) }
+    var showTextSettings by remember { mutableStateOf(false) }
+    
+    val isEraser = activeColor == Color.Transparent
+    var activeTool by remember { mutableStateOf(if (isEraser) DoodleSubTool.ERASER else DoodleSubTool.valueOf(vm.activeDoodleTool.value)) }
+    androidx.compose.runtime.LaunchedEffect(activeTool) { vm.activeDoodleTool.value = activeTool.name }
+
+    if (showColorPicker) {
+        com.gorilla.gallery.ui.components.ColorPickerDialog(
+            initialColor = lastUsedColor,
+            onColorSelected = { 
+                vm.currentColor.value = it
+                lastUsedColor = it
+            },
+            onDismissRequest = { showColorPicker = false }
+        )
+    }
+
+    if (showTextSettings) {
+        val ft = vm.floatingText.value
+        GlassCustomDialog(
+            onDismissRequest = { showTextSettings = false }
         ) {
-            colors.forEach { color ->
-                val isSelected = (activeColor == color)
-                val isEraser = color == Color.Transparent
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .pressScale(scale = 0.88f)
-                        .clip(CircleShape)
-                        .background(if (isEraser) Color(0xFF222222) else color)
-                        .border(
-                            width = if (isSelected) 2.dp else 1.dp,
-                            color = if (isSelected) LocalDynamicColors.current.accent else DesignTokens.TextSecondary.copy(alpha = 0.35f),
-                            shape = CircleShape
-                        )
-                        .clickable { vm.currentColor.value = color },
-                    contentAlignment = Alignment.Center
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("Text Settings", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                
+                Text("Font Style", style = MaterialTheme.typography.labelMedium, color = DesignTokens.TextSecondary)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    if (isEraser) {
-                        androidx.compose.foundation.Canvas(modifier = Modifier.size(20.dp)) {
-                            val w = size.width
-                            val h = size.height
-                            rotate(45f) {
-                                val rectW = w * 0.45f
-                                val rectH = h * 0.8f
-                                val left = (w - rectW) / 2
-                                val top = (h - rectH) / 2
-                                val path = androidx.compose.ui.graphics.Path().apply {
-                                    addRoundRect(
-                                        androidx.compose.ui.geometry.RoundRect(
-                                            left = left,
-                                            top = top,
-                                            right = left + rectW,
-                                            bottom = top + rectH,
-                                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.1f)
-                                        )
-                                    )
-                                }
-                                clipPath(path) {
-                                    drawRect(
-                                        color = Color.White,
-                                        topLeft = androidx.compose.ui.geometry.Offset(left, top + rectH * 0.45f),
-                                        size = androidx.compose.ui.geometry.Size(rectW, rectH * 0.55f)
-                                    )
-                                }
-                                drawPath(
-                                    path = path,
-                                    color = Color.White,
-                                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = w * 0.08f)
-                                )
-                            }
+                    val fonts = listOf(
+                        "Roboto" to CustomRobotoFamily,
+                        "Kalam" to CustomKalamFamily,
+                        "Zilla Slab" to CustomZillaSlabFamily
+                    )
+                    fonts.forEach { (name, family) ->
+                        val selected = ft?.fontFamily == family
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(40.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (selected) LocalDynamicColors.current.accent else Color.White.copy(alpha = 0.1f))
+                                .clickable {
+                                    ft?.let { vm.floatingText.value = it.copy(fontFamily = family) }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(name, color = if (selected) Color.Black else Color.White, style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+
+                Text("Font Weight", style = MaterialTheme.typography.labelMedium, color = DesignTokens.TextSecondary)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    val weights = listOf(
+                        "Thin" to FontWeight.Thin,
+                        "Normal" to FontWeight.Normal,
+                        "Bold" to FontWeight.Bold
+                    )
+                    weights.forEach { (name, weight) ->
+                        val selected = ft?.fontWeight == weight
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(40.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (selected) LocalDynamicColors.current.accent else Color.White.copy(alpha = 0.1f))
+                                .clickable {
+                                    ft?.let { vm.floatingText.value = it.copy(fontWeight = weight) }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(name, color = if (selected) Color.Black else Color.White, style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 }
             }
         }
+    }
+    
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(top = 6.dp, bottom = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        // Top Row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val doodleOptions = listOf(DoodleSubTool.PEN, DoodleSubTool.PENCIL, DoodleSubTool.ERASER)
+            val selectedToolIndex = if (vm.isTextMode.value) -1 else doodleOptions.indexOf(activeTool)
+            val toolOffsetDp by androidx.compose.animation.core.animateDpAsState(
+                targetValue = if (selectedToolIndex >= 0) (4.dp + (32.dp * selectedToolIndex)) else 0.dp,
+                animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.68f, stiffness = 380f),
+                label = "toolPillOffset"
+            )
 
-        Spacer(Modifier.width(8.dp))
+            Box(
+                modifier = Modifier
+                    .height(32.dp)
+                    .clip(CapsuleShape)
+                    .background(Color.White.copy(alpha = 0.04f))
+                    .border(1.dp, Color.White.copy(alpha = 0.05f), CapsuleShape)
+                    .pointerInput(Unit) {
+                        detectHorizontalDragGestures(
+                            onDragStart = { offset ->
+                                val x = offset.x
+                                val idx = ((x - 4.dp.toPx()) / 32.dp.toPx()).toInt().coerceIn(0, 2)
+                                val tool = doodleOptions[idx]
+                                if (activeTool != tool) {
+                                    activeTool = tool
+                                    vm.isTextMode.value = false
+                                    vm.currentColor.value = if (tool == DoodleSubTool.ERASER) Color.Transparent else lastUsedColor
+                                }
+                            },
+                            onHorizontalDrag = { change, _ ->
+                                val x = change.position.x
+                                val idx = ((x - 4.dp.toPx()) / 32.dp.toPx()).toInt().coerceIn(0, 2)
+                                val tool = doodleOptions[idx]
+                                if (activeTool != tool) {
+                                    activeTool = tool
+                                    vm.isTextMode.value = false
+                                    vm.currentColor.value = if (tool == DoodleSubTool.ERASER) Color.Transparent else lastUsedColor
+                                }
+                                change.consume()
+                            }
+                        )
+                    },
+                contentAlignment = Alignment.CenterStart
+            ) {
+                if (selectedToolIndex >= 0) {
+                    Box(
+                        Modifier
+                            .offset(x = toolOffsetDp)
+                            .size(30.dp, 24.dp)
+                            .clip(CapsuleShape)
+                            .background(com.gorilla.gallery.ui.theme.LocalDynamicColors.current.accent.copy(alpha = 0.16f))
+                            .border(1.dp, com.gorilla.gallery.ui.theme.LocalDynamicColors.current.accent.copy(alpha = 0.35f), CapsuleShape)
+                    )
+                }
 
-        GlassSlider(
-            value = strokeWidth,
-            onValueChange = { vm.currentStrokeWidth.value = it },
-            valueRange = 4f..64f,
-            modifier = Modifier.weight(1f)
-        )
+                Row(
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    DoodleToolItem(
+                        icon = androidx.compose.material.icons.Icons.Rounded.Edit,
+                        isActive = activeTool == DoodleSubTool.PEN && !vm.isTextMode.value,
+                        onClick = { 
+                            activeTool = DoodleSubTool.PEN
+                            vm.isTextMode.value = false
+                            vm.currentColor.value = lastUsedColor 
+                        }
+                    )
+                    DoodleToolItem(
+                        icon = androidx.compose.material.icons.Icons.Rounded.Brush,
+                        isActive = activeTool == DoodleSubTool.PENCIL && !vm.isTextMode.value,
+                        onClick = { 
+                            activeTool = DoodleSubTool.PENCIL
+                            vm.isTextMode.value = false
+                            vm.currentColor.value = lastUsedColor 
+                        }
+                    )
+                    DoodleToolItem(
+                        icon = null,
+                        isActive = activeTool == DoodleSubTool.ERASER && !vm.isTextMode.value,
+                        onClick = { 
+                            activeTool = DoodleSubTool.ERASER
+                            vm.isTextMode.value = false
+                            vm.currentColor.value = Color.Transparent 
+                        },
+                        isEraserShape = true
+                    )
+                }
+            }
+
+            val isTextMode = vm.isTextMode.value
+            Row(
+                modifier = Modifier
+                    .height(32.dp)
+                    .pressScale(scale = 0.94f)
+                    .clip(CapsuleShape)
+                    .background(if (isTextMode) com.gorilla.gallery.ui.theme.LocalDynamicColors.current.accent.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.04f))
+                    .border(1.dp, if (isTextMode) com.gorilla.gallery.ui.theme.LocalDynamicColors.current.accent.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.05f), CapsuleShape)
+                    .clickable(
+                        interactionSource = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null,
+                    ) {
+                        if (isTextMode) {
+                            showTextSettings = true
+                        } else {
+                            vm.isTextMode.value = true
+                            if (vm.floatingText.value == null) {
+                                vm.floatingText.value = FloatingText(
+                                    text = "Add text here",
+                                    offset = vm.imageRenderedBounds.center,
+                                    color = lastUsedColor,
+                                    scale = 1f
+                                )
+                            }
+                        }
+                    }
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                androidx.compose.material3.Icon(
+                    imageVector = androidx.compose.material.icons.Icons.Rounded.TextFields,
+                    contentDescription = null,
+                    tint = if (isTextMode) com.gorilla.gallery.ui.theme.LocalDynamicColors.current.accent else Color.White.copy(alpha = 0.85f),
+                    modifier = Modifier.size(13.dp)
+                )
+                Text(
+                    text = "Add Text",
+                    color = if (isTextMode) com.gorilla.gallery.ui.theme.LocalDynamicColors.current.accent else Color.White.copy(alpha = 0.85f),
+                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
+                )
+            }
+        }
+
+        // Bottom Row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .height(32.dp)
+                    .clip(CapsuleShape)
+                    .background(Color.White.copy(alpha = 0.04f))
+                    .border(1.dp, Color.White.copy(alpha = 0.05f), CapsuleShape)
+                    .padding(start = 5.dp, end = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(22.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(Color.White.copy(alpha = 0.06f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val effectiveStroke = if (activeTool == DoodleSubTool.PENCIL) strokeWidth * 1.5f else strokeWidth
+                    val nibSize = (strokeWidth / 64f * 18f).coerceIn(4f, 18f).dp
+                    Box(
+                        modifier = Modifier
+                            .size(nibSize)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(if (activeTool == DoodleSubTool.ERASER) Color.White else if (activeTool == DoodleSubTool.PENCIL) lastUsedColor.copy(alpha = 0.5f) else lastUsedColor)
+                            .then(if (activeTool == DoodleSubTool.ERASER) Modifier.border(1.dp, Color.Black.copy(alpha = 0.3f), androidx.compose.foundation.shape.CircleShape) else Modifier)
+                    )
+                }
+
+                GlassSlider(
+                    value = strokeWidth,
+                    onValueChange = { vm.currentStrokeWidth.value = it },
+                    valueRange = 4f..64f,
+                    modifier = Modifier.width(100.dp)
+                )
+            }
+            
+            Spacer(Modifier.width(12.dp))
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val swatches = listOf(
+                    Color(0xFF34D399),
+                    Color(0xFFFF3B30),
+                    Color(0xFFFFCC00),
+                    Color(0xFF007AFF)
+                )
+                swatches.forEach { color ->
+                    val isActive = lastUsedColor == color && vm.currentColor.value == color && activeTool != DoodleSubTool.ERASER && !vm.isTextMode.value
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .scale(if (isActive) 1.18f else 1f)
+                            .pressScale(scale = 0.9f)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(color)
+                            .border(2.dp, if (isActive) Color.White else Color.Transparent, androidx.compose.foundation.shape.CircleShape)
+                            .clickable(
+                                interactionSource = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                indication = null,
+                            ) {
+                                lastUsedColor = color
+                                vm.currentColor.value = color
+                                if (activeTool == DoodleSubTool.ERASER) activeTool = DoodleSubTool.PEN
+                                vm.isTextMode.value = false
+                            }
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(androidx.compose.ui.graphics.Brush.sweepGradient(listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red)))
+                        .border(1.dp, Color.White.copy(alpha = 0.4f), androidx.compose.foundation.shape.CircleShape)
+                        .pressScale(scale = 0.9f)
+                        .clickable(
+                            interactionSource = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                            indication = null,
+                        ) { showColorPicker = true }
+                )
+            }
+        }
     }
 }
+
 
 private fun Modifier.softHorizontalScrollEdges(
     scrollState: androidx.compose.foundation.ScrollState,
@@ -2212,3 +2956,67 @@ private fun Modifier.softHorizontalScrollEdges(
             )
         }
     }
+
+@Composable
+private fun FeaturePill(
+    icon: @Composable (tint: Color) -> Unit,
+    label: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onClick: (() -> Unit)? = null,
+) {
+    val accent = LocalDynamicColors.current.accent
+    val appColors = LocalAppColors.current
+    val primaryText = appColors.textPrimary
+    val secondaryText = appColors.textSecondary
+    
+    val bgColor by androidx.compose.animation.animateColorAsState(
+        if (selected) accent.copy(alpha = 0.20f) else appColors.bgGlass,
+        label = "pillBgColor"
+    )
+    val borderColor by androidx.compose.animation.animateColorAsState(
+        if (selected) accent.copy(alpha = 0.42f) else appColors.borderGlass,
+        label = "pillBorderColor"
+    )
+    val contentColor by androidx.compose.animation.animateColorAsState(
+        if (selected) primaryText else secondaryText,
+        label = "pillContentColor"
+    )
+
+    Row(
+        modifier
+            .height(32.dp)
+            .then(if (onClick != null && enabled) Modifier.pressScale(scale = 0.94f) else Modifier)
+            .clip(CapsuleShape)
+            .background(bgColor, CapsuleShape)
+            .border(1.dp, borderColor, CapsuleShape)
+            .then(
+                if (onClick != null) {
+                    Modifier
+                        .clickable(
+                            enabled = enabled,
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = onClick,
+                        )
+                } else {
+                    Modifier
+                }
+            )
+            .padding(horizontal = 9.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        icon(if (selected) accent else contentColor)
+        Spacer(Modifier.width(6.dp))
+        Text(
+            label,
+            color = contentColor,
+            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+        )
+    }
+}

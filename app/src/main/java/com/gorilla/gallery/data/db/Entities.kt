@@ -25,6 +25,7 @@ data class MediaEntity(
     val bucketId: Long,
     val bucketName: String,
     val relativePath: String,
+    val absolutePath: String,
     val orientation: Int,
 ) {
     fun toItem(isFavorite: Boolean): MediaItem {
@@ -50,6 +51,7 @@ data class MediaEntity(
             bucketId = bucketId,
             bucketName = bucketName,
             relativePath = relativePath,
+            absolutePath = absolutePath,
             orientation = orientation,
             isFavorite = isFavorite,
         )
@@ -71,6 +73,7 @@ data class MediaEntity(
             bucketId = i.bucketId,
             bucketName = i.bucketName,
             relativePath = i.relativePath,
+            absolutePath = i.absolutePath,
             orientation = i.orientation,
         )
     }
@@ -116,6 +119,7 @@ data class TrashEntity(
             bucketId = -2L,
             bucketName = "Trash",
             relativePath = originalRelativePath,
+            absolutePath = internalPath,
             orientation = 0,
             trashId = id,
         )
@@ -156,6 +160,7 @@ data class SecureItemEntity(
             bucketId = -3L,
             bucketName = "Secure Folder",
             relativePath = originalRelativePath,
+            absolutePath = internalPath,
             orientation = 0,
             secureId = id,
         )

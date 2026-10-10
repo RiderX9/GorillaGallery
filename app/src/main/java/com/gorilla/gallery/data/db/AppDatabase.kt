@@ -14,7 +14,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         SecureItemEntity::class,
         ImageEmbeddingEntry::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -50,6 +50,12 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_6_7 = object : androidx.room.migration.Migration(6, 7) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE media ADD COLUMN absolutePath TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         fun get(context: Context): AppDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -58,6 +64,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "gorilla_gallery.db",
                 )
                     .addCallback(IMAGE_LABEL_CALLBACK)
+                    .addMigrations(MIGRATION_6_7)
                     .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
                     .also { INSTANCE = it }

@@ -1,9 +1,17 @@
 @file:android.annotation.SuppressLint("UnsafeOptInUsageError")
 package com.gorilla.gallery.ui.screens.videoeditor
+import me.saket.telephoto.zoomable.zoomable
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.basicMarquee
 
 import androidx.compose.runtime.setValue
 
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.animation.core.animateDpAsState
@@ -32,6 +40,8 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.IntrinsicSize
+import com.gorilla.gallery.ui.theme.DesignTokens
+import com.gorilla.gallery.ui.theme.kernelSuGlassBackdrop
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -193,13 +203,13 @@ fun VideoEditorScreen(
     onClose: () -> Unit,
     vm: VideoEditorViewModel = viewModel(factory = VideoEditorViewModel.Factory),
 ) {
-    BackHandler(onBack = onClose)
 
     val context = LocalContext.current
     val isLandscape = androidx.compose.ui.platform.LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
     val haptic = rememberHaptic()
+
     val saving by vm.saving.collectAsStateWithLifecycle()
-    val appColors = LocalAppColors.current
+    val appColors = com.gorilla.gallery.ui.theme.LocalAppColors.current
     val chromeText = appColors.textPrimary
     val chromeTextSecondary = appColors.textSecondary
     val videoFrameBackdrop = rememberLayerBackdrop()
@@ -462,7 +472,20 @@ fun VideoEditorScreen(
                 .background(Color.Black),
         ) {
 
+        val originalOnClose = onClose
         var uiVisible by remember { mutableStateOf(false) }
+        val closeScope = androidx.compose.runtime.rememberCoroutineScope()
+        val onClose: () -> Unit = {
+            if (uiVisible) {
+                uiVisible = false
+                closeScope.launch {
+                    kotlinx.coroutines.delay(250)
+                    originalOnClose()
+                }
+            } else {
+                originalOnClose()
+            }
+        }
         LaunchedEffect(Unit) { uiVisible = true }
         val topOffset by androidx.compose.animation.core.animateDpAsState(if (uiVisible) 0.dp else (-100).dp, androidx.compose.animation.core.tween(400, easing = androidx.compose.animation.core.FastOutSlowInEasing))
         val bottomOffset by androidx.compose.animation.core.animateDpAsState(if (uiVisible) 0.dp else 100.dp, androidx.compose.animation.core.tween(400, easing = androidx.compose.animation.core.FastOutSlowInEasing))
@@ -563,34 +586,55 @@ fun VideoEditorScreen(
             }
         }
 
-        Box(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .fillMaxSize()
-                .padding(
-                    start = if (isLandscape) 120.dp else 32.dp,
-                    end = if (isLandscape) 120.dp else 32.dp,
-                    top = if (isLandscape) 32.dp else 120.dp,
-                    bottom = if (isLandscape) 32.dp else 220.dp
-                ),
-            contentAlignment = Alignment.Center
-        ) {
+        val zoomableState = me.saket.telephoto.zoomable.rememberZoomableState(
+            zoomSpec = me.saket.telephoto.zoomable.ZoomSpec(maxZoomFactor = 10f)
+        ).apply { contentScale = androidx.compose.ui.layout.ContentScale.None }
+
+        LaunchedEffect(openMode, item.uri) {
+            zoomableState.resetZoom(withAnimation = false)
+        }
+
+        val scope = androidx.compose.runtime.rememberCoroutineScope()
+        val isZoomed by androidx.compose.runtime.remember {
+            androidx.compose.runtime.derivedStateOf {
+                zoomableState.contentTransformation.isSpecified &&
+                zoomableState.contentTransformation.scaleMetadata.userZoom > 1.05f
+            }
+        }
+        BackHandler {
+            if (isZoomed) {
+                scope.launch { zoomableState.resetZoom(withAnimation = true) }
+            } else {
+                onClose()
+            }
+        }
+
         BoxWithConstraints(
             Modifier
+                .align(Alignment.Center)
                 .fillMaxSize()
-                .padding(vertical = cropVerticalPadding)
                 .layerBackdrop(videoFrameBackdrop),
             contentAlignment = Alignment.Center
         ) {
-            val widthDp = maxWidth.value.coerceAtLeast(1f)
-            val heightDp = maxHeight.value.coerceAtLeast(1f)
-            
+            val fullW = maxWidth.value
+            val fullH = maxHeight.value
+
+            val startPad = if (isLandscape) 120f else 32f
+            val endPad = if (isLandscape) 120f else 32f
+            val topPad = if (isLandscape) 32f else 120f
+            val bottomPad = if (isLandscape) 32f else 220f
+
+            val cropVertPad = cropVerticalPadding.value
+
+            val widthDp = (fullW - startPad - endPad).coerceAtLeast(1f)
+            val heightDp = (fullH - topPad - bottomPad - cropVertPad * 2f).coerceAtLeast(1f)
+
             val isRotated = item.orientation == 90 || item.orientation == 270
             val rawVideoW = if (isRotated) item.height.toFloat() else item.width.toFloat()
             val rawVideoH = if (isRotated) item.width.toFloat() else item.height.toFloat()
             val actualVideoAspect = playerVideoAspect ?: (rawVideoW / rawVideoH).takeIf { !it.isNaN() && it > 0f } ?: (widthDp / heightDp)
             val videoAspect = if (userRotationDegrees % 180 != 0) 1f / actualVideoAspect else actualVideoAspect
-            
+
             val containerRatio = widthDp / heightDp
             val videoWidthDp: Float
             val videoHeightDp: Float
@@ -601,16 +645,16 @@ fun VideoEditorScreen(
                 videoHeightDp = heightDp
                 videoWidthDp = heightDp * videoAspect
             }
-            
+
             val isAppliedPreview = !showOriginalPreview &&
                 appliedCropPreset != VideoCropPreset.ORIGINAL
-            
+
             val rect = if (isAppliedPreview) {
                 appliedCropRect ?: defaultCropRect(appliedCropPreset, videoAspect)
             } else {
                 Rect(0f, 0f, 1f, 1f)
             }
-            
+
             val cropWindowWidthDp = rect.width.coerceAtLeast(0.001f) * videoWidthDp
             val cropWindowHeightDp = rect.height.coerceAtLeast(0.001f) * videoHeightDp
             val appliedPreviewScale = if (isAppliedPreview) {
@@ -628,60 +672,112 @@ fun VideoEditorScreen(
             val scaledVideoOffsetXDp = if (isAppliedPreview) -rect.left * scaledVideoWidthDp else 0f
             val scaledVideoOffsetYDp = if (isAppliedPreview) -rect.top * scaledVideoHeightDp else 0f
 
-            var previewScale by remember { mutableFloatStateOf(1f) }
-            var previewOffset by remember { mutableStateOf(Offset.Zero) }
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            LaunchedEffect(previewWidthDp, previewHeightDp, fullW, fullH, cropVertPad) {
+                if (previewWidthDp > 0f && previewHeightDp > 0f) {
+                    zoomableState.setContentLocation(
+                        object : me.saket.telephoto.zoomable.ZoomableContentLocation {
+                            override fun location(
+                                layoutSize: androidx.compose.ui.geometry.Size,
+                                direction: androidx.compose.ui.unit.LayoutDirection
+                            ): androidx.compose.ui.geometry.Rect {
+                                val startPx = with(density) { startPad.dp.toPx() }
+                                val endPx = with(density) { endPad.dp.toPx() }
+                                val topPx = with(density) { (topPad + cropVertPad).dp.toPx() }
+                                val bottomPx = with(density) { (bottomPad + cropVertPad).dp.toPx() }
 
-            LaunchedEffect(item.uri, openMode) {
-                previewScale = 1f
-                previewOffset = Offset.Zero
-            }
+                                val padW = layoutSize.width - startPx - endPx
+                                val padH = layoutSize.height - topPx - bottomPx
 
-            Box(
-                modifier = (if (openMode != VideoEditorMode.CROP) {
-                    Modifier.pressAndHoldOriginalPreview { showOriginalPreview = it }
-                } else {
-                    Modifier
-                })
-                .pointerInput(openMode) {
-                    if (openMode != VideoEditorMode.CROP) {
-                        detectTransformGestures { centroid, pan, zoom, _ ->
-                            val prevScale = previewScale
-                            val newScale = (prevScale * zoom).coerceIn(1f, 10f)
-                            val actualZoom = if (prevScale > 0f) newScale / prevScale else 1f
-                            previewScale = newScale
-                            if (previewScale > 1f) {
-                                val maxX = ((previewWidthDp * previewScale) - widthDp).coerceAtLeast(0f) / 2f
-                                val maxY = ((previewHeightDp * previewScale) - heightDp).coerceAtLeast(0f) / 2f
-                                val zoomDx = if (!centroid.x.isNaN()) (centroid.x - widthDp / 2f) * (1f - actualZoom) else 0f
-                                val zoomDy = if (!centroid.y.isNaN()) (centroid.y - heightDp / 2f) * (1f - actualZoom) else 0f
-                                previewOffset = Offset(
-                                    x = (previewOffset.x * actualZoom + pan.x + zoomDx).coerceIn(-maxX, maxX),
-                                    y = (previewOffset.y * actualZoom + pan.y + zoomDy).coerceIn(-maxY, maxY)
+                                val wPx = with(density) { previewWidthDp.dp.toPx() }
+                                val hPx = with(density) { previewHeightDp.dp.toPx() }
+
+                                val imgX = startPx + (padW - wPx) / 2f
+                                val imgY = topPx + (padH - hPx) / 2f
+
+                                return androidx.compose.ui.geometry.Rect(
+                                    left = imgX,
+                                    top = imgY,
+                                    right = imgX + wPx,
+                                    bottom = imgY + hPx
                                 )
-                            } else {
-                                previewOffset = Offset.Zero
                             }
+                        }
+                    )
+                    
+                    val startPx = with(density) { startPad.dp.toPx() }
+                    val endPx = with(density) { endPad.dp.toPx() }
+                    val topPx = with(density) { (topPad + cropVertPad).dp.toPx() }
+                    val bottomPx = with(density) { (bottomPad + cropVertPad).dp.toPx() }
+
+                    val fullWPx = with(density) { fullW.dp.toPx() }
+                    val fullHPx = with(density) { fullH.dp.toPx() }
+
+                    val padW = fullWPx - startPx - endPx
+                    val padH = fullHPx - topPx - bottomPx
+
+                    val wPx = with(density) { previewWidthDp.dp.toPx() }
+                    val hPx = with(density) { previewHeightDp.dp.toPx() }
+
+                    val imgX = startPx + (padW - wPx) / 2f
+                    val imgY = topPx + (padH - hPx) / 2f
+
+                    zoomableState.contentAlignment = object : androidx.compose.ui.Alignment {
+                        override fun align(
+                            size: androidx.compose.ui.unit.IntSize,
+                            space: androidx.compose.ui.unit.IntSize,
+                            layoutDirection: androidx.compose.ui.unit.LayoutDirection
+                        ): androidx.compose.ui.unit.IntOffset {
+                            val progressX = if (space.width > wPx) {
+                                (size.width.toFloat() - wPx) / (space.width - wPx)
+                            } else 0f
+                            
+                            val progressY = if (space.height > hPx) {
+                                (size.height.toFloat() - hPx) / (space.height - hPx)
+                            } else 0f
+                            
+                            val clampedX = progressX.coerceIn(0f, 1f)
+                            val clampedY = progressY.coerceIn(0f, 1f)
+                            
+                            val targetX = imgX * (1f - clampedX)
+                            val targetY = imgY * (1f - clampedY)
+                            
+                            return androidx.compose.ui.unit.IntOffset(targetX.toInt(), targetY.toInt())
                         }
                     }
                 }
-                .pointerInput(openMode) {
-                    if (openMode != VideoEditorMode.CROP) {
-                        detectTapGestures(
-                            onDoubleTap = {
-                                previewScale = 1f
-                                previewOffset = Offset.Zero
-                            }
-                        )
-                    }
-                }
-                .graphicsLayer {
-                    scaleX = previewScale
-                    scaleY = previewScale
-                    translationX = previewOffset.x
-                    translationY = previewOffset.y
-                },
-                contentAlignment = Alignment.TopStart,
+            }
+
+            val zoomModifier = if (openMode != VideoEditorMode.CROP) {
+                Modifier.zoomable(
+                    state = zoomableState,
+                    onDoubleClick = me.saket.telephoto.zoomable.DoubleClickToZoomListener.cycle(2.5f),
+                    clipToBounds = false
+                )
+            } else Modifier
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(zoomModifier)
+                    .padding(
+                        start = startPad.dp,
+                        end = endPad.dp,
+                        top = (topPad + cropVertPad).dp,
+                        bottom = (bottomPad + cropVertPad).dp
+                    ),
+                contentAlignment = Alignment.Center
             ) {
+                Box(
+                    modifier = Modifier
+                        .size(previewWidthDp.dp, previewHeightDp.dp)
+                        .then(
+                            if (openMode != VideoEditorMode.CROP) {
+                                Modifier.pressAndHoldOriginalPreview { showOriginalPreview = it }
+                            } else Modifier
+                        ),
+                    contentAlignment = Alignment.TopStart
+                ) {
                 Layout(
                     content = {
                         val scaledPlayerWidthDp = if (userRotationDegrees % 180 != 0) scaledVideoHeightDp else scaledVideoWidthDp
@@ -743,6 +839,7 @@ fun VideoEditorScreen(
                     }
                 }
             }
+                }
         }
         if (!isPlaying) {
             Box(
@@ -769,7 +866,6 @@ fun VideoEditorScreen(
             }
         }
 
-        }
 
         Column(
             modifier = Modifier
@@ -904,6 +1000,7 @@ fun VideoEditorScreen(
                         VideoEditorMode.FILTERS -> {
                             FilterPresetStrip(
                                 selected = filterPreset,
+                                imageUri = item.uri,
                                 onSelect = { 
                                     if (filterPreset != it) {
                                         saveUndoState()
@@ -1714,8 +1811,77 @@ private fun CropApplyRow(
 }
 
 @Composable
+private fun FilterChip(
+    preset: com.gorilla.gallery.data.model.FilterPreset,
+    selected: Boolean,
+    imageUri: android.net.Uri,
+    onClick: () -> Unit,
+) {
+    val haptic = rememberHaptic()
+    val interaction = remember { MutableInteractionSource() }
+    val accent = LocalDynamicColors.current.accent
+    val matrix = remember(preset) { androidx.compose.ui.graphics.ColorMatrix(com.gorilla.gallery.data.model.EditMatrix.preset(preset).array.copyOf()) }
+    
+    Box(
+        modifier = Modifier
+            .width(60.dp)
+            .pressScale(interaction, pressedScale = 0.95f)
+            .clip(RoundedCornerShape(20.dp))
+            .background(if (selected) accent.copy(alpha = 0.1f) else Color.White.copy(alpha = 0.04f))
+            .border(
+                width = 1.dp,
+                color = if (selected) accent.copy(alpha = 0.45f) else Color.White.copy(alpha = 0.08f),
+                shape = RoundedCornerShape(20.dp)
+            )
+            .clickable(interaction, indication = null) { haptic(); onClick() }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 4.dp, end = 4.dp, top = 6.dp, bottom = 2.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(width = 44.dp, height = 54.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color.Black)
+                    .border(
+                        width = 1.dp,
+                        color = if (selected) accent else Color.White.copy(alpha = 0.12f),
+                        shape = RoundedCornerShape(14.dp)
+                    )
+            ) {
+                coil.compose.AsyncImage(
+                    model = imageUri,
+                    contentDescription = null,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    colorFilter = androidx.compose.ui.graphics.ColorFilter.colorMatrix(matrix),
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            Text(
+                text = preset.label,
+                color = if (selected) accent else com.gorilla.gallery.ui.theme.DesignTokens.TextSecondary,
+                fontSize = 11.sp,
+                fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.SemiBold,
+                letterSpacing = (-0.01).sp,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 2.dp)
+            )
+        }
+    }
+}
+
+@Composable
 private fun FilterPresetStrip(
     selected: com.gorilla.gallery.data.model.FilterPreset,
+    imageUri: android.net.Uri,
     onSelect: (com.gorilla.gallery.data.model.FilterPreset) -> Unit,
 ) {
     val isLandscape = androidx.compose.ui.platform.LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
@@ -1729,31 +1895,12 @@ private fun FilterPresetStrip(
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
     ) {
         com.gorilla.gallery.data.model.FilterPreset.entries.forEach { preset ->
-            FeaturePill(
-                icon = { tint ->
-                    Box(
-                        Modifier
-                            .size(16.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (preset == com.gorilla.gallery.data.model.FilterPreset.ORIGINAL) {
-                                    LocalAppColors.current.textSecondary.copy(alpha = 0.30f)
-                                } else {
-                                    when(preset){ com.gorilla.gallery.data.model.FilterPreset.VIVID -> Color(0xFF7CFFB2); com.gorilla.gallery.data.model.FilterPreset.WARM -> Color(0xFFFFA552); com.gorilla.gallery.data.model.FilterPreset.COOL -> Color(0xFF64B5FF); com.gorilla.gallery.data.model.FilterPreset.FADED -> Color(0xFFE0E0E0); com.gorilla.gallery.data.model.FilterPreset.MONO -> Color.Gray; else -> Color.Transparent }.copy(alpha = 0.70f)
-                                },
-                            )
-                            .border(
-                                1.dp,
-                                tint,
-                                CircleShape,
-                            ),
-                    )
-                },
-                label = preset.label,
+            FilterChip(
+                preset = preset,
                 selected = preset == selected,
-            ) {
-                onSelect(preset)
-            }
+                imageUri = imageUri,
+                onClick = { onSelect(preset) }
+            )
         }
     }
 }
@@ -2099,19 +2246,13 @@ private fun FeaturePill(
     Row(
         modifier
             .height(32.dp)
-            .clip(CapsuleShape)
             .then(if (onClick != null && enabled) Modifier.pressScale(scale = 0.94f) else Modifier)
-            .background(bgColor)
+            .clip(CapsuleShape)
+            .background(bgColor, CapsuleShape)
             .border(1.dp, borderColor, CapsuleShape)
             .then(
                 if (onClick != null) {
                     Modifier
-                        .pointerInput(Unit) {
-                            awaitEachGesture {
-                                awaitFirstDown(requireUnconsumed = false)
-                                waitForUpOrCancellation()
-                            }
-                        }
                         .clickable(
                             enabled = enabled,
                             interactionSource = remember { MutableInteractionSource() },

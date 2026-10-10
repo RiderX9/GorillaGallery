@@ -1,4 +1,5 @@
 package com.gorilla.gallery.ui.screens.editor
+import androidx.compose.ui.graphics.toArgb
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -47,8 +48,45 @@ class EditorViewModel(private val container: AppContainer) : ViewModel() {
     val cropRedoHistory = mutableStateListOf<Bitmap>()
     val loadError = mutableStateOf(false)
 
-    val currentColor: MutableState<Color> = mutableStateOf(Color.Red)
+    val currentColor: MutableState<Color> = mutableStateOf(Color.Unspecified)
     val currentStrokeWidth: MutableState<Float> = mutableStateOf(6f)
+    val activeDoodleTool = mutableStateOf("PEN")
+    val isTextMode: MutableState<Boolean> = mutableStateOf(false)
+    val floatingTexts = androidx.compose.runtime.mutableStateListOf<FloatingText>()
+    val activeTextIndex = androidx.compose.runtime.mutableIntStateOf(-1)
+    
+    val floatingText: MutableState<FloatingText?> = object : MutableState<FloatingText?> {
+        override var value: FloatingText?
+            get() = if (activeTextIndex.intValue in floatingTexts.indices) floatingTexts[activeTextIndex.intValue] else null
+            set(value) {
+                if (value == null) {
+                    if (activeTextIndex.intValue in floatingTexts.indices) {
+                        floatingTexts.removeAt(activeTextIndex.intValue)
+                        activeTextIndex.intValue = -1
+                    }
+                } else {
+                    if (activeTextIndex.intValue in floatingTexts.indices) {
+                        floatingTexts[activeTextIndex.intValue] = value
+                    } else {
+                        floatingTexts.add(value)
+                        activeTextIndex.intValue = floatingTexts.lastIndex
+                    }
+                }
+            }
+        override fun component1() = value
+        override fun component2(): (FloatingText?) -> Unit = { value = it }
+    }
+
+    fun stampFloatingText() {
+        if (floatingTexts.isEmpty()) return
+        saveSnapshot()
+        floatingTexts.forEach { ft ->
+            drawText(ft.text, ft.offset.x, ft.offset.y, ft.color, ft.scale * 10f, ft.rotation, ft.fontFamily, ft.fontWeight)
+        }
+        floatingTexts.clear()
+        activeTextIndex.intValue = -1
+        isTextMode.value = false
+    }
     private var loadToken = 0L
 
     private val _saving = MutableStateFlow(false)
@@ -188,6 +226,15 @@ class EditorViewModel(private val container: AppContainer) : ViewModel() {
         redoStack.clear()
     }
 
+    fun drawPath(path: androidx.compose.ui.graphics.Path, paint: androidx.compose.ui.graphics.Paint) {
+        val canvas = overlayCanvas ?: return
+        canvas.drawPath(path, paint)
+        val bmp = overlayBitmap.value
+        if (bmp != null) {
+            overlayBitmap.value = bmp.asAndroidBitmap().asImageBitmap()
+        }
+    }
+
     fun drawSegment(x1: Float, y1: Float, x2: Float, y2: Float, paint: androidx.compose.ui.graphics.Paint) {
         val canvas = overlayCanvas ?: return
         canvas.drawLine(
@@ -199,6 +246,36 @@ class EditorViewModel(private val container: AppContainer) : ViewModel() {
         if (bmp != null) {
             overlayBitmap.value = bmp.asAndroidBitmap().asImageBitmap()
         }
+    }
+
+    fun drawText(text: String, x: Float, y: Float, color: Color, textSize: Float, rotation: Float, fontFamily: androidx.compose.ui.text.font.FontFamily, fontWeight: androidx.compose.ui.text.font.FontWeight) {
+        val bmp = overlayBitmap.value ?: return
+        val androidBmp = bmp.asAndroidBitmap()
+        val canvas = android.graphics.Canvas(androidBmp)
+        
+        val style = if (fontWeight == androidx.compose.ui.text.font.FontWeight.Bold) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL
+        val typeface = when (fontFamily) {
+            androidx.compose.ui.text.font.FontFamily.Cursive -> android.graphics.Typeface.create("cursive", style)
+            androidx.compose.ui.text.font.FontFamily.Monospace -> android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, style)
+            else -> android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, style)
+        }
+
+        val paint = android.graphics.Paint().apply {
+            this.color = color.toArgb()
+            this.textSize = textSize * 4f // Scaling factor for text size relative to stroke width
+            this.isAntiAlias = true
+            this.textAlign = android.graphics.Paint.Align.CENTER
+            this.typeface = typeface
+        }
+        
+        canvas.save()
+        canvas.translate(x, y)
+        canvas.rotate(rotation)
+        canvas.drawText(text, 0f, -((paint.descent() + paint.ascent()) / 2), paint)
+        canvas.restore()
+        
+        overlayBitmap.value = androidBmp.asImageBitmap()
+        overlayCanvas = androidx.compose.ui.graphics.Canvas(overlayBitmap.value!!)
     }
 
     fun undoDoodle() {
@@ -257,6 +334,7 @@ class EditorViewModel(private val container: AppContainer) : ViewModel() {
             }
             val last = cropHistory.removeAt(cropHistory.lastIndex)
             workingBitmap.value = last
+            _cropRect.value = null
         }
     }
 
@@ -269,6 +347,7 @@ class EditorViewModel(private val container: AppContainer) : ViewModel() {
             }
             val next = cropRedoHistory.removeAt(cropRedoHistory.lastIndex)
             workingBitmap.value = next
+            _cropRect.value = null
         }
     }
 
@@ -286,6 +365,8 @@ class EditorViewModel(private val container: AppContainer) : ViewModel() {
             return
         }
         val source = workingBitmap.value ?: return
+        
+        stampFloatingText()
         
         val cropX = (cropLeft * source.width).roundToInt().coerceIn(0, source.width)
         val cropY = (cropTop * source.height).roundToInt().coerceIn(0, source.height)
@@ -369,6 +450,7 @@ class EditorViewModel(private val container: AppContainer) : ViewModel() {
         }
 
         // Flatten doodle overlay
+        stampFloatingText()
         val overlay = overlayBitmap.value
         if (overlay != null) {
             val androidOverlay = overlay.asAndroidBitmap()
@@ -483,8 +565,15 @@ class EditorViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             _saving.value = true
             val bmp = bakeBitmap(item, edit)
-            repo.saveCopy(bmp, item.displayName)
+            val uri = repo.saveCopy(bmp, item.displayName)
             bmp.recycle()
+            
+            val context = app.container.context
+            val req = coil.request.ImageRequest.Builder(context)
+                .data(uri)
+                .build()
+            coil.Coil.imageLoader(context).execute(req)
+            
             app.showSnackbar.tryEmit("Saved")
             _saving.value = false
             onDone()
@@ -496,9 +585,10 @@ class EditorViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             _saving.value = true
             val bmp = bakeBitmap(item, edit)
-            app.requestOverwrite(item.uri, bmp) // bitmap held by AppViewModel until consent resolves
-            _saving.value = false
-            onDone()
+            app.requestOverwrite(item.uri, bmp) {
+                _saving.value = false
+                onDone()
+            }
         }
     }
 

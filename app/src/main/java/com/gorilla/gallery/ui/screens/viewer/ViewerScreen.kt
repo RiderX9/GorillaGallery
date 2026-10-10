@@ -143,6 +143,7 @@ fun ViewerScreen(
     onDismissProgress: (Float) -> Unit = {},
     dismissRequested: Boolean = false,
     highQualityThumbnails: Boolean = false,
+    skipEnterAnimation: Boolean = false,
 ) {
     var items by remember(initialItems) { mutableStateOf(initialItems) }
     if (items.isEmpty()) { onClose(); return }
@@ -168,7 +169,14 @@ fun ViewerScreen(
     var dragX by remember { mutableFloatStateOf(0f) }
     val dragReset = remember { Animatable(0f) }
     val dragXReset = remember { Animatable(0f) }
-    val minimizeProgress = remember { Animatable(0f) }
+    val minimizeProgress = remember { Animatable(if (sourceBounds != null && !skipEnterAnimation) 1f else 0f) }
+    
+    LaunchedEffect(Unit) {
+        if (minimizeProgress.value > 0f) {
+            minimizeProgress.animateTo(0f, tween(durationMillis = 250, easing = FastOutSlowInEasing))
+        }
+    }
+    
     val handoffProgress = remember { Animatable(0f) }
     var showInfo by remember { mutableStateOf(false) }
     var showOptions by remember { mutableStateOf(false) }
@@ -209,21 +217,19 @@ fun ViewerScreen(
                 handoffProgress.snapTo(0f)
                 minimizeProgress.animateTo(
                     1f,
-                    tween(durationMillis = 145, easing = FastOutSlowInEasing)
+                    tween(durationMillis = 250, easing = FastOutSlowInEasing)
                 )
             }
             onSwipeDismiss()
         }
     }
 
-    DisposableEffect(uiVisible, context, appColors.isDark) {
+    DisposableEffect(uiVisible, context) {
         val window = (context as? ComponentActivity)?.window
         val controller = window?.let { WindowCompat.getInsetsController(it, it.decorView) }
         if (window != null && controller != null) {
             controller.systemBarsBehavior =
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            controller.isAppearanceLightStatusBars = false
-            controller.isAppearanceLightNavigationBars = false
             if (uiVisible) {
                 controller.show(WindowInsetsCompat.Type.systemBars())
             } else {
@@ -233,11 +239,11 @@ fun ViewerScreen(
         onDispose {
             controller?.apply {
                 show(WindowInsetsCompat.Type.systemBars())
-                isAppearanceLightStatusBars = !appColors.isDark
-                isAppearanceLightNavigationBars = !appColors.isDark
             }
         }
     }
+
+
 
     val skipConfirmationsAndToasts = com.gorilla.gallery.ui.theme.LocalAppSettings.current.skipConfirmationsAndToasts
     val moveToTrashByDefaultForDelete = com.gorilla.gallery.ui.theme.LocalAppSettings.current.moveToTrashByDefaultForDelete
@@ -382,7 +388,7 @@ fun ViewerScreen(
         val dragTranslationY = dragY
         val settledTranslationY = (dragTranslationY * (1f - returnProgress)) + (targetTranslationY * returnProgress)
         val cornerProgress = maxOf(handoffProgress.value, minimizeProgress.value).coerceIn(0f, 1f)
-        val cornerRadiusDp = 28f + (6f - 28f) * FastOutSlowInEasing.transform(cornerProgress)
+        val cornerRadiusDp = 0f
         val fittedWidthDp = with(density) { fittedWidth.toDp() }
         val fittedHeightDp = with(density) { fittedHeight.toDp() }
         val targetWidthDp = source?.let { with(density) { (it.width + 2).toDp() } } ?: fittedWidthDp
@@ -405,6 +411,7 @@ fun ViewerScreen(
                                 var dragYAccumulator = 0f
                                 var dragXAccumulator = 0f
                                 var swipeDownOccurred = false
+                                var infoTriggeredInThisGesture = false
                                 var pointerId = down.id
                                 
                                 val touchSlop = 4f
@@ -455,7 +462,7 @@ fun ViewerScreen(
                                         lastDragTimeMs = dragEvent.uptimeMillis
                                         lastDragDelta = velocityY
 
-                                        if (swipeDownOccurred || accumulatedDrag > 0f || dragYAccumulator > 0f) {
+                                        if (!infoTriggeredInThisGesture && (swipeDownOccurred || accumulatedDrag > 0f || dragYAccumulator > 0f)) {
                                             swipeDownOccurred = true
                                             val maxDragX = screenWidthPx * 0.80f
                                             val maxDragY = screenHeightPx * 0.80f
@@ -467,6 +474,7 @@ fun ViewerScreen(
                                         } else {
                                             if (!swipeDownOccurred && accumulatedDrag < -100f && !showInfo) {
                                                 showInfo = true
+                                                infoTriggeredInThisGesture = true
                                             }
                                         }
                                     }
@@ -499,14 +507,17 @@ fun ViewerScreen(
         ) {
             HorizontalPager(
                 state = pagerState,
-                beyondViewportPageCount = 2,
+                beyondViewportPageCount = 1,
                 pageSpacing = 16.dp,
                 userScrollEnabled = pageScale <= 1.01f && !isEditorOpen,
                 modifier = Modifier.fillMaxSize(),
             ) { page ->
                 val item = items[page]
-                val pageMediaAspect = if (item.displayWidth > 0 && item.displayHeight > 0) {
-                    item.displayWidth.toFloat() / item.displayHeight.toFloat()
+                val pageIsRotated = item.orientation == 90 || item.orientation == 270
+                val pageTrueWidth = if (pageIsRotated) item.displayHeight else item.displayWidth
+                val pageTrueHeight = if (pageIsRotated) item.displayWidth else item.displayHeight
+                val pageMediaAspect = if (pageTrueWidth > 0 && pageTrueHeight > 0) {
+                    pageTrueWidth.toFloat() / pageTrueHeight.toFloat()
                 } else {
                     screenWidthPx / screenHeightPx
                 }
@@ -541,7 +552,12 @@ fun ViewerScreen(
                     refreshTrigger = app.refreshTrigger,
                     pauseFullResDecode = page == pagerState.currentPage && fullResDecodePaused,
                     highQualityThumbnails = highQualityThumbnails,
+                    skipEnterAnimation = skipEnterAnimation,
                     onProvideBackdrop = { activeVideoBackdrop = it },
+                    onVideoTextureUpdate = { view -> 
+                        if (view != null) app.videoTextureViews[item.id] = view 
+                        else app.videoTextureViews.remove(item.id) 
+                    },
                     dismissTransform = if (page == pagerState.currentPage) {
                         ViewerDismissTransform(
                             width = mediaWidthDp,
@@ -550,7 +566,7 @@ fun ViewerScreen(
                             translationY = settledTranslationY,
                             cornerRadius = cornerRadiusDp.dp,
                             clip = dismissProgress > 0f,
-                            alpha = if (returningToGrid) 1f - (minimizeProgress.value * 0.08f) else 1f,
+                            alpha = 1f,
                             crop = dismissProgress > 0.001f,
                         )
                     } else {
@@ -571,33 +587,27 @@ fun ViewerScreen(
 
         // Top glass bar.
         AnimatedVisibility(
-            visible = !inPip && uiVisible && (!current.isVideo || !isLandscape || current.trashId != null || current.secureId != null),
+            visible = !inPip && uiVisible && dismissProgress < 0.02f && (!current.isVideo || !isLandscape || current.trashId != null || current.secureId != null),
             enter = slideInVertically(animationSpec = tween(durationMillis = 150, easing = FastOutSlowInEasing)) { -it } + fadeIn(animationSpec = tween(durationMillis = 100, easing = LinearEasing)),
             exit = slideOutVertically(animationSpec = tween(durationMillis = 150, easing = FastOutSlowInEasing)) { -it } + fadeOut(animationSpec = tween(durationMillis = 100, easing = LinearEasing)),
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 12.dp)
-                // Also fade with the swipe-down so the top/bottom bars don't linger over the
-                // revealed grid while the photo drags away.
-                .alpha(dismissChromeAlpha),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
         ) {
             TopBar(item = current, onClose = { dismissToGrid() }, onMenu = { showOptions = true }, onInfo = { showInfo = true })
         }
 
         // Bottom glass bar.
         AnimatedVisibility(
-            visible = !inPip && uiVisible && !showOptions && !showInfo && (!current.isVideo || current.trashId != null || current.secureId != null),
+            visible = !inPip && uiVisible && !showOptions && !showInfo && dismissProgress < 0.02f && (!current.isVideo || current.trashId != null || current.secureId != null),
             enter = slideInVertically(animationSpec = tween(durationMillis = 150, easing = FastOutSlowInEasing)) { it } + fadeIn(animationSpec = tween(durationMillis = 100, easing = LinearEasing)),
             exit = slideOutVertically(animationSpec = tween(durationMillis = 150, easing = FastOutSlowInEasing)) { it } + fadeOut(animationSpec = tween(durationMillis = 100, easing = LinearEasing)),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
-                .padding(12.dp)
-                // Also fade with the swipe-down so the top/bottom bars don't linger over the
-                // revealed grid while the photo drags away.
-                .alpha(dismissChromeAlpha),
+                .padding(12.dp),
         ) {
             if (current.trashId != null || current.secureId != null) {
                 InternalFolderBottomBar(
@@ -646,16 +656,15 @@ fun ViewerScreen(
         }
     }
 
+    val dialogBackdrop = if (current.isVideo) activeVideoBackdrop else null
+    CompositionLocalProvider(LocalLiquidGlassContentBackdrop provides (dialogBackdrop ?: LocalLiquidGlassContentBackdrop.current)) {
     if (showInfo) {
-        val backdrop = if (current.isVideo) activeVideoBackdrop else null
-        CompositionLocalProvider(LocalLiquidGlassContentBackdrop provides (backdrop ?: LocalLiquidGlassContentBackdrop.current)) {
-            PhotoInfoSheet(
-                app = app,
-                item = current,
-                onDismiss = { showInfo = false },
-                onEditMetadata = { showInfo = false; showEditMetadata = true }
-            )
-        }
+        PhotoInfoSheet(
+            app = app,
+            item = current,
+            onDismiss = { showInfo = false },
+            onEditMetadata = { showInfo = false; showEditMetadata = true }
+        )
     }
 
     showDeleteConfirm?.let { item ->
@@ -717,9 +726,7 @@ fun ViewerScreen(
     }
 
     if (showOptions) {
-        val backdrop = if (current.isVideo) activeVideoBackdrop else null
-        CompositionLocalProvider(LocalLiquidGlassContentBackdrop provides (backdrop ?: LocalLiquidGlassContentBackdrop.current)) {
-            ViewerOptionsSheet(
+        ViewerOptionsSheet(
                 item = current,
                 onSecure = {
                     showOptions = false
@@ -742,7 +749,6 @@ fun ViewerScreen(
                 onWallpaper = { showOptions = false; showWallpaperConfirm = true },
                 onDismiss = { showOptions = false },
             )
-        }
     }
 
     if (showEditMetadata) {
@@ -767,11 +773,13 @@ fun ViewerScreen(
                 }
             },
             onDismiss = { showEditMetadata = false },
+            isVideo = current.isVideo,
         )
     }
 
     if (showSecureConfirm) {
         GlassAlertDialog(
+            surfaceAlpha = if (current.isVideo) 0.78f else 0.92f,
             onDismissRequest = { showSecureConfirm = false },
             title = "Move to Secure Folder",
             text = "This photo will be moved to your Secure Folder and hidden from the main gallery. " +
@@ -791,6 +799,7 @@ fun ViewerScreen(
         WallpaperConfirmDialog(
             onConfirm = { showWallpaperConfirm = false; app.setAsWallpaper(current) },
             onDismiss = { showWallpaperConfirm = false },
+            isVideo = current.isVideo,
         )
     }
 
@@ -799,7 +808,9 @@ fun ViewerScreen(
             folders = folders,
             onPick = { path -> showFolderPicker = false; app.moveToAlbum(current, path) },
             onDismiss = { showFolderPicker = false },
+            isVideo = current.isVideo,
         )
+    }
     }
     }
 }
@@ -925,7 +936,10 @@ private fun ZoomablePage(
     refreshTrigger: Int = 0,
     pauseFullResDecode: Boolean = false,
     highQualityThumbnails: Boolean = false,
+    skipEnterAnimation: Boolean = false,
     onProvideBackdrop: (com.kyant.backdrop.Backdrop) -> Unit = {},
+    onVideoSize: (Int, Int) -> Unit = { _, _ -> },
+    onVideoTextureUpdate: (android.view.TextureView?) -> Unit = {},
     dismissTransform: ViewerDismissTransform = ViewerDismissTransform(0.dp, 0.dp, 0f, 0f, 0.dp, false, 1f, false)
 ) {
     val context = LocalContext.current
@@ -959,7 +973,7 @@ private fun ZoomablePage(
     LaunchedEffect(item.displayWidth, item.displayHeight) {
         if (item.displayWidth > 0 && item.displayHeight > 0) {
             zoomableState.setContentLocation(
-                me.saket.telephoto.zoomable.ZoomableContentLocation.scaledInsideAndCenterAligned(
+                me.saket.telephoto.zoomable.ZoomableContentLocation.scaledToFitAndCenterAligned(
                     androidx.compose.ui.geometry.Size(item.displayWidth.toFloat(), item.displayHeight.toFloat())
                 )
             )
@@ -1027,61 +1041,101 @@ private fun ZoomablePage(
                 controlsVisible = uiVisible && isCurrent,
                 onToggleControls = onTap,
                 onHideControls = onHide,
-                isActive = isCurrent,
+                isActive = isCurrent && !isEditorOpen,
                 dismissRequested = dismissRequested,
                 cropToFill = dismissTransform.crop,
                 isDismissingMedia = dismissingMedia,
                 previewBitmap = previewBitmap,
+                skipEnterAnimation = skipEnterAnimation,
                 highQualityThumbnails = highQualityThumbnails,
                 onProvideBackdrop = onProvideBackdrop,
                 modifier = Modifier.fillMaxSize(),
                 videoModifier = mediaLayerModifier,
+                onVideoTextureUpdate = onVideoTextureUpdate,
                 zoomModifier = if (!isEditorOpen && !dismissingMedia) zoomModifier else Modifier
             )
         } else {
-            Box(Modifier.fillMaxSize().then(if (!isEditorOpen && !dismissingMedia) zoomModifier else Modifier), contentAlignment = Alignment.Center) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                val zoomableImageState = me.saket.telephoto.zoomable.rememberZoomableImageState(zoomableState)
+                
+                // Manually animate the background fade out when high-res loads to prevent opening flicker
+                var loadedBgAlpha by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(1f) }
+                androidx.compose.runtime.LaunchedEffect(zoomableImageState.isImageDisplayed) {
+                    if (zoomableImageState.isImageDisplayed) {
+                        kotlinx.coroutines.delay(80) // Wait 80ms for texture to fully paint to screen
+                        androidx.compose.animation.core.animate(
+                            initialValue = 1f,
+                            targetValue = 0f,
+                            animationSpec = androidx.compose.animation.core.tween(250)
+                        ) { value, _ -> loadedBgAlpha = value }
+                    } else {
+                        loadedBgAlpha = 1f
+                    }
+                }
+                
+                // Instantly snap to 1f during dismiss to prevent dismiss flicker (no black frames)
+                val bgAlpha = if (dismissingMedia) 1f else loadedBgAlpha
+                val bgModifier = mediaLayerModifier.alpha(bgAlpha)
+
                 // Reuse the grid thumbnail underneath so huge photos never open on a black frame.
                 previewBitmap?.let { bitmap ->
                     Image(
                         bitmap = bitmap.asImageBitmap(),
                         contentDescription = null,
                         contentScale = if (dismissTransform.crop) ContentScale.Crop else ContentScale.Fit,
-                        modifier = mediaLayerModifier,
+                        modifier = bgModifier,
                     )
                 }
-                if (!previewOnlyDismiss) {
-                    // Full-resolution image on top — draws over the preview once decoded.
-                    @OptIn(com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi::class)
-                    com.bumptech.glide.integration.compose.GlideImage(
-                        model = if (pauseFullResDecode && !fullResLoaded) null else item.uri,
+                
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    val coilRequest = androidx.compose.runtime.remember(item.uri, item.dateModifiedSec, refreshTrigger) {
+                        coil.request.ImageRequest.Builder(context)
+                            .data(item.uri)
+                            .setParameter("date_modified", item.dateModifiedSec)
+                            .memoryCacheKey("${item.uri}_${item.dateModifiedSec}_${refreshTrigger}")
+                            .diskCacheKey("${item.uri}_${item.dateModifiedSec}_${refreshTrigger}")
+                            .build()
+                    }
+
+                // Screen-sized smooth preview (always visible during dismiss, hidden during zoom)
+                // Shares Coil memory cache with ZoomableAsyncImage so it decodes instantly with 0 lag.
+                coil.compose.AsyncImage(
+                    model = coilRequest,
+                    contentDescription = null,
+                    contentScale = if (dismissTransform.crop) ContentScale.Crop else ContentScale.Fit,
+                    modifier = bgModifier
+                )
+
+
+                    val doubleClickListener = androidx.compose.runtime.remember(containerSize, item.displayWidth, item.displayHeight) {
+                        object : me.saket.telephoto.zoomable.DoubleClickToZoomListener {
+                            override suspend fun onDoubleClick(state: me.saket.telephoto.zoomable.ZoomableState, centroid: androidx.compose.ui.geometry.Offset) {
+                                if (containerSize.width > 0 && containerSize.height > 0 && item.displayWidth > 0 && item.displayHeight > 0) {
+                                    val baseZoom = kotlin.math.min(containerSize.width.toFloat() / item.displayWidth, containerSize.height.toFloat() / item.displayHeight)
+                                    val targetScale = baseZoom * 2.5f
+                                    if (state.contentTransformation.scale.scaleX > baseZoom * 1.05f) {
+                                        state.resetZoom()
+                                    } else {
+                                        state.zoomTo(targetScale, centroid)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+
+                    // Full-resolution 4K image on top. Uses fillMaxSize so it NEVER clips when zooming!
+                    me.saket.telephoto.zoomable.coil.ZoomableAsyncImage(
+                        model = if (pauseFullResDecode && !fullResLoaded) null else coilRequest,
                         contentDescription = item.displayName,
                         contentScale = if (dismissTransform.crop) ContentScale.Crop else ContentScale.Fit,
-                        modifier = mediaLayerModifier
-                    ) {
-                        it.addListener(object : com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable> {
-                            override fun onLoadFailed(
-                                e: com.bumptech.glide.load.engine.GlideException?,
-                                m: Any?,
-                                t: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>,
-                                isFirstResource: Boolean
-                            ): Boolean {
-                                fullResLoaded = false
-                                return false
-                            }
-
-                            override fun onResourceReady(
-                                resource: android.graphics.drawable.Drawable,
-                                model: Any,
-                                target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>?,
-                                dataSource: com.bumptech.glide.load.DataSource,
-                                isFirstResource: Boolean
-                            ): Boolean {
-                                fullResLoaded = true
-                                return false
-                            }
-                        })
-                    }
-                }
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .alpha(if (dismissingMedia) 0f else 1f),
+                        state = zoomableImageState,
+                        onClick = { onTap() },
+                        onDoubleClick = doubleClickListener
+                    )
             }
         }
     }

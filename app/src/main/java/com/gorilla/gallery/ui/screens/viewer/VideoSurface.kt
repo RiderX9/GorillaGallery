@@ -118,13 +118,16 @@ fun VideoSurface(
     controlsVisible: Boolean,
     onToggleControls: () -> Unit,
     onHideControls: () -> Unit,
+    onVideoTextureUpdate: (android.view.TextureView?) -> Unit = {},
     isActive: Boolean,
     dismissRequested: Boolean,
     cropToFill: Boolean,
     isDismissingMedia: Boolean = false,
     previewBitmap: android.graphics.Bitmap? = null,
     highQualityThumbnails: Boolean = false,
+    skipEnterAnimation: Boolean = false,
     onProvideBackdrop: (com.kyant.backdrop.Backdrop) -> Unit = {},
+    onVideoSize: (Int, Int) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
     videoModifier: Modifier = Modifier,
     zoomModifier: Modifier = Modifier
@@ -155,6 +158,20 @@ fun VideoSurface(
         }
     }
 
+
+    var isFirstFrameRendered by remember(item.uri) { mutableStateOf(false) }
+    DisposableEffect(exo) {
+        val listener = object : Player.Listener {
+            override fun onRenderedFirstFrame() {
+                isFirstFrameRendered = true
+            }
+        }
+        exo.addListener(listener)
+        onDispose {
+            exo.removeListener(listener)
+        }
+    }
+
     LaunchedEffect(loopVideos, exo) {
         exo.repeatMode = if (loopVideos) androidx.media3.common.Player.REPEAT_MODE_ONE else androidx.media3.common.Player.REPEAT_MODE_OFF
     }
@@ -164,6 +181,12 @@ fun VideoSurface(
     var videoWidth by remember { mutableStateOf(0) }
     var videoHeight by remember { mutableStateOf(0) }
     
+    LaunchedEffect(videoWidth, videoHeight) {
+        if (videoWidth > 0 && videoHeight > 0) {
+            onVideoSize(videoWidth, videoHeight)
+        }
+    }
+
     val enablePipMode = com.gorilla.gallery.ui.theme.LocalAppSettings.current.enablePipMode
     val activity = context as? androidx.activity.ComponentActivity
     
@@ -214,6 +237,7 @@ fun VideoSurface(
     var isScrubbing by remember { mutableStateOf(false) }
     var scrubPositionMs by remember { mutableLongStateOf(0L) }
     var wasPlayingBeforeScrub by remember { mutableStateOf(false) }
+    var playerError by remember { mutableStateOf<androidx.media3.common.PlaybackException?>(null) }
 
     DisposableEffect(exo) {
         val listener = object : Player.Listener {
@@ -229,9 +253,16 @@ fun VideoSurface(
             override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_ENDED) {
-                    exo.seekTo(0)
                     exo.pause()
+                    // Avoid seeking to 0 for single-frame/0-duration videos, 
+                    // otherwise the decoder flushes before the frame is rendered, resulting in a black screen.
+                    if (exo.currentPosition > 100L || exo.duration > 100L) {
+                        exo.seekTo(0)
+                    }
                 }
+            }
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                playerError = error
             }
         }
         exo.addListener(listener)
@@ -261,10 +292,17 @@ fun VideoSurface(
     }
 
     // Poll position for the seek bar.
-    LaunchedEffect(exo) {
+    LaunchedEffect(exo, playerError) {
         while (true) {
             positionMs = exo.currentPosition
-            if (exo.duration > 0) durationMs = exo.duration
+            val currentDuration = exo.duration
+            if (currentDuration != androidx.media3.common.C.TIME_UNSET) {
+                durationMs = currentDuration
+            } else if (exo.playbackState == Player.STATE_ENDED) {
+                durationMs = exo.currentPosition
+            } else if (playerError != null) {
+                durationMs = 0L
+            }
             kotlinx.coroutines.delay(200)
         }
     }
@@ -286,21 +324,14 @@ fun VideoSurface(
                 .graphicsLayer {
                     // Read state to invalidate the graphics layer every frame
                     val trigger = frameTrigger
-                    alpha = if (trigger >= 0) 1f else 0.99f
+                    alpha = if (trigger % 2 == 0) 1f else 0.999f
                 }
                 .layerBackdrop(videoFrameBackdrop), 
             contentAlignment = Alignment.Center
         ) {
             Box(modifier = Modifier.fillMaxSize().then(zoomModifier), contentAlignment = Alignment.Center) {
                 Box(modifier = videoModifier) {
-                    AsyncImage(
-                    model = item.uri,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-    
-                if (!isDismissingMedia) {
+                if (!isDismissingMedia && playerError == null) {
                     AndroidView(
                         // Inflated from XML so the PlayerView uses a TextureView surface — a SurfaceView ignores
                         // the Compose transforms applied during the swipe-dismiss, leaving the video "stuck" at
@@ -322,6 +353,7 @@ fun VideoSurface(
                                 isClickable = false
                                 isFocusable = false
                                 setOnTouchListener { _, _ -> false }
+                                onVideoTextureUpdate(this.videoSurfaceView as? android.view.TextureView)
                             }
                         },
                         update = { view ->
@@ -333,16 +365,53 @@ fun VideoSurface(
                         },
                         onRelease = { view ->
                             view.player = null
+                            onVideoTextureUpdate(null)
                         },
                         modifier = Modifier.fillMaxSize()
                     )
-                } else if (previewBitmap != null) {
-                    androidx.compose.foundation.Image(
-                        bitmap = previewBitmap.asImageBitmap(),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
+                }
+
+                val thumbAlpha by androidx.compose.animation.core.animateFloatAsState(
+                    targetValue = if (isFirstFrameRendered) 0f else 1f,
+                    animationSpec = tween(durationMillis = 250)
+                )
+
+                val currentAlpha = if (isDismissingMedia) 1f else thumbAlpha
+
+                var isOpening by remember { mutableStateOf(true) }
+                LaunchedEffect(Unit) {
+                    kotlinx.coroutines.delay(400)
+                    isOpening = false
+                }
+
+                if (currentAlpha > 0f) {
+                    if (!isOpening && isDismissingMedia && previewBitmap != null) {
+                        androidx.compose.foundation.Image(
+                            bitmap = previewBitmap.asImageBitmap(),
+                            contentDescription = null,
+                            contentScale = if (cropToFill) ContentScale.Crop else ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize().alpha(currentAlpha)
+                        )
+                    } else {
+                        Box(modifier = Modifier.fillMaxSize().alpha(currentAlpha)) {
+                            if (previewBitmap != null && !skipEnterAnimation) {
+                                androidx.compose.foundation.Image(
+                                    bitmap = previewBitmap.asImageBitmap(),
+                                    contentDescription = null,
+                                    contentScale = if (cropToFill) ContentScale.Crop else ContentScale.Fit,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                            AsyncImage(
+                                model = coil.request.ImageRequest.Builder(LocalContext.current)
+                                    .data(item.uri)
+                                    .build(),
+                                contentDescription = null,
+                                contentScale = if (cropToFill) ContentScale.Crop else ContentScale.Fit,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                    }
                 }
             }
             }
@@ -631,7 +700,7 @@ fun VideoSurface(
 
                                 Box(
                                     modifier = Modifier
-                                        .size(32.dp)
+                                        .size(36.dp)
                                         .pressScale(scale = 0.88f)
                                         .clip(CircleShape)
                                         .pointerInput(Unit) {
@@ -646,7 +715,7 @@ fun VideoSurface(
                                         if (muted) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp,
                                         contentDescription = "Mute",
                                         tint = chromeSecondaryTint,
-                                        modifier = Modifier.size(18.dp)
+                                        modifier = Modifier.size(24.dp)
                                     )
                                 }
                             }

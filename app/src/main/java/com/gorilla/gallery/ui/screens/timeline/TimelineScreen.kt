@@ -29,6 +29,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Sort
@@ -101,6 +104,24 @@ fun TimelineScreen(
     // Sections only exist in the Content state; everything below treats "no content" uniformly.
     val sections = (uiState as? TimelineUiState.Content)?.sections ?: emptyList()
     val flat = remember(sections) { sections.flatMap { it.items } }
+    
+    val itemAtGridIndex = remember(sections) {
+        buildMap<Int, com.gorilla.gallery.data.model.MediaItem> {
+            var lazyIndex = 1 // top title item
+            sections.forEach { section ->
+                val firstItem = section.items.firstOrNull()
+                if (section.label.isNotEmpty()) {
+                    if (firstItem != null) put(lazyIndex, firstItem)
+                    lazyIndex += 1
+                }
+                section.items.forEach { item ->
+                    put(lazyIndex, item)
+                    lazyIndex += 1
+                }
+            }
+        }
+    }
+
     val gridIndexByMediaId = remember(sections) {
         buildMap {
             var lazyIndex = 1 // top title item
@@ -282,14 +303,21 @@ fun TimelineScreen(
                 enter = fadeIn(animationSpec = com.gorilla.gallery.ui.theme.SpringSpecs.Standard)
             ) {
                 var headerHeight by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableIntStateOf(0) }
-                val headerHeightDp = with(LocalDensity.current) { headerHeight.toDp() }
+                val density = LocalDensity.current
+                val statusBarTopDp = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+                val headerHeightDp: androidx.compose.ui.unit.Dp = if (headerHeight > 0) with(density) { headerHeight.toDp() } else (statusBarTopDp + 68.dp)
                 
-                Box(Modifier.layerBackdrop(gridBackdrop).fillMaxSize()) {
+                Box(Modifier.layerBackdrop(gridBackdrop).fillMaxSize().background(com.gorilla.gallery.ui.theme.DesignTokens.BgBase)) {
                     com.gorilla.gallery.ui.components.SortTransition(
                         sortState = Triple(sortMode, sortAscending, sections),
                         contentKey = { it.first to it.second }
                     ) { state ->
-                        MediaGrid(
+                        val gridPadding = PaddingValues(
+                            top = headerHeightDp,
+                            bottom = contentPadding.calculateBottomPadding() + 60.dp
+                        )
+
+                            MediaGrid(
                             sections = state.third,
                             columns = settings.gridColumns,
                             selectionMode = selectionMode,
@@ -305,10 +333,7 @@ fun TimelineScreen(
                             onLongClick = { item -> selected = selected + item.id },
                             dragSelectionEnabled = true,
                             onDragSelectionChange = { selected = it },
-                            contentPadding = PaddingValues(
-                                top = headerHeightDp,
-                                bottom = contentPadding.calculateBottomPadding() + 120.dp
-                            ),
+                            contentPadding = gridPadding,
                             state = androidx.compose.foundation.lazy.grid.rememberLazyGridState().also { state ->
                                 androidx.compose.runtime.SideEffect {
                                     gridState = state
@@ -360,6 +385,14 @@ fun TimelineScreen(
         ) {
             SelectionActionBar(
                 count = selected.size,
+                allSelected = flat.isNotEmpty() && selected.size == flat.size,
+                onSelectAll = {
+                    if (selected.size == flat.size) {
+                        clear()
+                    } else {
+                        selected = flat.map { it.id }.toSet()
+                    }
+                },
                 onFavorite = { selectedItems.forEach { app.toggleFavorite(it) }; clear() },
                 onShare = { shareItems(context, selectedItems) },
                 onSecure = { if (skipConfirm) { app.moveToSecure(selectedItems); clear() } else { showSecureConfirm = selectedItems } },
@@ -402,102 +435,14 @@ fun TimelineScreen(
         }
 
         if (showSortDialog) {
-            com.gorilla.gallery.ui.components.AnimatedGlassDialog(
-                onDismissRequest = { showSortDialog = false }
-            ) { scale ->
-                val configuration = androidx.compose.ui.platform.LocalConfiguration.current
-                val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
-                
-                com.gorilla.gallery.ui.theme.LiquidGlassSurface(
-                    depth = com.gorilla.gallery.ui.theme.GlassDepth.MID, shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
-                    backdrop = gridBackdrop,
-                    surfaceColor = DesignTokens.BgSurface.copy(alpha = 0.92f),
-                    saturationOverride = 1.55f, tintAlphaOverride = 0.07f,
-                    modifier = Modifier.widthIn(min = 300.dp, max = if (isLandscape) 560.dp else 300.dp).scale(scale).clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null, onClick = {}),
-            ) {
-                        Column(modifier = Modifier.padding(18.dp)) {
-                            val accent = com.gorilla.gallery.ui.theme.LocalDynamicColors.current.accent
-                            val haptic = com.gorilla.gallery.ui.theme.rememberHaptic()
-                            androidx.compose.material3.Text(text = "Sort & Order Options", style = androidx.compose.material3.MaterialTheme.typography.titleMedium, color = DesignTokens.TextPrimary, modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp))
-                            
-                            @Composable
-                            fun SortOption(label: String, selected: Boolean, onClick: () -> Unit) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth()
-                                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
-                                        .background(if (selected) accent.copy(alpha=0.15f) else Color.Transparent)
-                                        .clickable { haptic(); onClick(); showSortDialog = false }
-                                        .padding(horizontal = 10.dp, vertical = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    androidx.compose.material3.Text(
-                                        text = label, 
-                                        fontSize = 17.sp, 
-                                        color = if (selected) accent else DesignTokens.TextPrimary, 
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
-                            }
-                            
-                            @Composable fun OrderOption(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, selected: Boolean, onClick: () -> Unit) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth()
-                                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
-                                        .background(if (selected) accent.copy(alpha=0.15f) else Color.Transparent)
-                                        .clickable { haptic(); onClick(); showSortDialog = false }
-                                        .padding(horizontal = 10.dp, vertical = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    androidx.compose.material3.Text(text = label, fontSize = 17.sp, color = if (selected) accent else DesignTokens.TextPrimary, modifier = Modifier.weight(1f))
-                                    androidx.compose.material3.Icon(imageVector = icon, contentDescription = label, tint = if (selected) accent else DesignTokens.TextPrimary, modifier = Modifier.size(20.dp))
-                                }
-                            }
-
-                            if (isLandscape) {
-                                Row(modifier = Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min)) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        androidx.compose.material3.Text("Sort By", color = com.gorilla.gallery.ui.theme.DesignTokens.TextSecondary, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
-                                        SortOption("Date Taken", sortMode == "Date Taken") { vm.setSortMode("Date Taken"); vm.setSortAscending(false) }
-                                        SortOption("Date Modified", sortMode == "Date Modified") { vm.setSortMode("Date Modified"); vm.setSortAscending(false) }
-                                        SortOption("Name (A-Z)", sortMode == "Name (A-Z)") { vm.setSortMode("Name (A-Z)"); vm.setSortAscending(true) }
-                                        SortOption("File Size", sortMode == "File Size") { vm.setSortMode("File Size"); vm.setSortAscending(false) }
-                                    }
-                                    Spacer(modifier = Modifier.width(16.dp))
-                                    Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                                        androidx.compose.material3.Text("Order", color = com.gorilla.gallery.ui.theme.DesignTokens.TextSecondary, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
-                                        OrderOption("Ascending", Icons.Rounded.ArrowUpward, sortAscending) { vm.setSortAscending(true) }
-                                        OrderOption("Descending", Icons.Rounded.ArrowDownward, !sortAscending) { vm.setSortAscending(false) }
-                                        
-                                        Spacer(modifier = Modifier.weight(1f))
-                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                            androidx.compose.material3.TextButton(onClick = { showSortDialog = false }, modifier = Modifier.pressScale(scale = 0.94f)) {
-                                                androidx.compose.material3.Text(text = "Close", style = androidx.compose.material3.MaterialTheme.typography.labelLarge, color = accent)
-                                            }
-                                        }
-                                    }
-                                }
-                            } else {
-                                androidx.compose.material3.Text("Sort By", color = com.gorilla.gallery.ui.theme.DesignTokens.TextSecondary, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
-                                SortOption("Date Taken", sortMode == "Date Taken") { vm.setSortMode("Date Taken"); vm.setSortAscending(false) }
-                                SortOption("Date Modified", sortMode == "Date Modified") { vm.setSortMode("Date Modified"); vm.setSortAscending(false) }
-                                SortOption("Name (A-Z)", sortMode == "Name (A-Z)") { vm.setSortMode("Name (A-Z)"); vm.setSortAscending(true) }
-                                SortOption("File Size", sortMode == "File Size") { vm.setSortMode("File Size"); vm.setSortAscending(false) }
-
-                                Box(modifier = Modifier.height(16.dp))
-                                androidx.compose.material3.Text("Order", color = com.gorilla.gallery.ui.theme.DesignTokens.TextSecondary, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
-                                OrderOption("Ascending", Icons.Rounded.ArrowUpward, sortAscending) { vm.setSortAscending(true) }
-                                OrderOption("Descending", Icons.Rounded.ArrowDownward, !sortAscending) { vm.setSortAscending(false) }
-                                
-                                Box(modifier = Modifier.height(12.dp))
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                    androidx.compose.material3.TextButton(onClick = { showSortDialog = false }, modifier = Modifier.pressScale(scale = 0.94f)) {
-                                        androidx.compose.material3.Text(text = "Close", style = androidx.compose.material3.MaterialTheme.typography.labelLarge, color = accent)
-                                    }
-                                }
-                            }
-                        }
-                    }
-            }
+            com.gorilla.gallery.ui.components.SortAndOrderDialog(
+                sortMode = sortMode,
+                sortAscending = sortAscending,
+                onDismissRequest = { showSortDialog = false },
+                onSortModeChange = { vm.setSortMode(it) },
+                onSortAscendingChange = { vm.setSortAscending(it) },
+                backdrop = gridBackdrop
+            )
         }
     }
 }

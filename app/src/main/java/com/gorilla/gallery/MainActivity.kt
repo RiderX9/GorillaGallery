@@ -138,6 +138,7 @@ class MainActivity : FragmentActivity(), BiometricGateway {
                     bucketId = 0,
                     bucketName = "",
                     relativePath = "",
+                    absolutePath = "",
                     orientation = 0
                 )
             }

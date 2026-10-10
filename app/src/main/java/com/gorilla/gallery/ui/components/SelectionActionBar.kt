@@ -4,12 +4,16 @@ import androidx.compose.material.icons.rounded.RestoreFromTrash
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Delete
@@ -23,8 +27,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.gorilla.gallery.ui.theme.kernelSuGlassBackdrop
 import com.gorilla.gallery.ui.theme.LocalAppColors
@@ -35,14 +40,11 @@ import com.gorilla.gallery.ui.theme.rememberHaptic
 
 import com.kyant.backdrop.Backdrop
 
-/**
- * Compact glass action bar shown in selection mode: a bare count number followed by the
- * Share / Favorite / Secure / Delete icons, all on one vertically-centered row. The pill
- * hugs its content (no fixed width) so nothing can be truncated.
- */
 @Composable
 fun SelectionActionBar(
     count: Int,
+    allSelected: Boolean = false,
+    onSelectAll: () -> Unit = {},
     onShare: () -> Unit,
     onFavorite: () -> Unit,
     onSecure: () -> Unit,
@@ -61,19 +63,34 @@ fun SelectionActionBar(
                 shape = RoundedCornerShape(percent = 50),
                 surfaceAlphaOverride = surfaceOpacity
             )
+            .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {}
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = count.toString(),
-                style = MaterialTheme.typography.titleMedium,
-                color = LocalDynamicColors.current.accent,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.width(44.dp),
-            )
-            Spacer(Modifier.width(16.dp))
+            Column(
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "$count Selected",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = LocalAppColors.current.textPrimary
+                )
+                val interaction = remember { MutableInteractionSource() }
+                Text(
+                    text = if (allSelected) "Deselect All" else "Select All",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = LocalDynamicColors.current.accent,
+                    modifier = Modifier
+                        .pressScale(interaction)
+                        .clickable(interactionSource = interaction, indication = null) { onSelectAll() }
+                        .padding(top = 2.dp)
+                )
+            }
+            Spacer(Modifier.width(28.dp))
             Row(
                 horizontalArrangement = Arrangement.spacedBy(20.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -92,13 +109,15 @@ private fun ActionIcon(
     icon: ImageVector,
     label: String,
     onClick: () -> Unit,
+    tint: Color = Color.Unspecified
 ) {
+    val actualTint = if (tint == Color.Unspecified) LocalAppColors.current.textPrimary else tint
     val interaction = remember { MutableInteractionSource() }
     val haptic = rememberHaptic()
     Icon(
         icon,
         contentDescription = label,
-        tint = LocalAppColors.current.textPrimary,
+        tint = actualTint,
         modifier = Modifier
             .pressScale(interaction)
             .clickable(interaction, indication = null) { haptic(); onClick() }
@@ -109,6 +128,8 @@ private fun ActionIcon(
 @Composable
 fun InternalSelectionActionBar(
     count: Int,
+    allSelected: Boolean = false,
+    onSelectAll: () -> Unit = {},
     onShare: () -> Unit,
     onRestore: () -> Unit,
     onDelete: () -> Unit,
@@ -127,19 +148,34 @@ fun InternalSelectionActionBar(
                 shape = RoundedCornerShape(percent = 50),
                 surfaceAlphaOverride = surfaceOpacity
             )
+            .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {}
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = count.toString(),
-                style = MaterialTheme.typography.titleMedium,
-                color = LocalDynamicColors.current.accent,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.width(44.dp),
-            )
-            Spacer(Modifier.width(16.dp))
+            Column(
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "$count Selected",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = LocalAppColors.current.textPrimary
+                )
+                val interaction = remember { MutableInteractionSource() }
+                Text(
+                    text = if (allSelected) "Deselect All" else "Select All",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = LocalDynamicColors.current.accent,
+                    modifier = Modifier
+                        .pressScale(interaction)
+                        .clickable(interactionSource = interaction, indication = null) { onSelectAll() }
+                        .padding(top = 2.dp)
+                )
+            }
+            Spacer(Modifier.width(28.dp))
             Row(
                 horizontalArrangement = Arrangement.spacedBy(20.dp),
                 verticalAlignment = Alignment.CenterVertically

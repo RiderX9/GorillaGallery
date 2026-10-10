@@ -45,11 +45,19 @@ enum class PlayerSliderStyle(val label: String) {
     SQUIGGLY("Squiggly")
 }
 
+enum class AppIconChoice(val aliasName: String, val label: String) {
+    DEFAULT("com.gorilla.gallery.MainActivityDefault", "Default"),
+    DARK("com.gorilla.gallery.MainActivityDark", "Dark"),
+    IOS_LIGHT("com.gorilla.gallery.MainActivityIosLight", "iOS Light"),
+    IOS_DARK("com.gorilla.gallery.MainActivityIosDark", "iOS Dark")
+}
+
 /** All persisted settings as a single immutable snapshot. */
 data class AppSettings(
     // Appearance
     val themeMode: ThemeMode = ThemeMode.AUTO,
     val accent: AccentChoice = AccentChoice.ADAPTIVE,
+    val appIcon: AppIconChoice = AppIconChoice.DEFAULT,
     val blurIntensity: BlurIntensity = BlurIntensity.MEDIUM,
     val liquidGlassIntensity: BlurIntensity = BlurIntensity.MEDIUM,
     val surfaceOpacity: Float = 0.4f,
@@ -63,6 +71,7 @@ data class AppSettings(
     val skipConfirmationsAndToasts: Boolean = false,
     val enablePipMode: Boolean = false,
     val moveToTrashByDefaultForDelete: Boolean = true,
+    val showScrollbar: Boolean = false,
 
     // Privacy / Secure Folder
     val secureFolderEnabled: Boolean = false,

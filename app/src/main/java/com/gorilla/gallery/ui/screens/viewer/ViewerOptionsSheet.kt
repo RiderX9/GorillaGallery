@@ -295,6 +295,7 @@ fun EditMetadataDialog(
     currentLocationName: String?,
     onConfirm: (newName: String, newDateMs: Long?, newLat: Double?, newLng: Double?) -> Unit,
     onDismiss: () -> Unit,
+    isVideo: Boolean = false,
 ) {
     var name by remember { mutableStateOf(currentBaseName) }
     var locationStr by remember { mutableStateOf(currentLocationName ?: "") }
@@ -316,7 +317,7 @@ fun EditMetadataDialog(
         mutableStateOf(if (currentDateMs != null) android.text.format.DateFormat.format("HH:mm:ss", cal).toString() else "") 
     }
     
-    GlassDialog(onDismiss = onDismiss) {
+    GlassDialog(onDismiss = onDismiss, surfaceAlpha = if (isVideo) 0.78f else 0.92f) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
             val contentColor = LocalAppColors.current.textPrimary
         Text(
@@ -478,8 +479,8 @@ fun EditMetadataDialog(
 
 /** Confirmation before overwriting the home-screen wallpaper. */
 @Composable
-fun WallpaperConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    GlassDialog(onDismiss = onDismiss) {
+fun WallpaperConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit, isVideo: Boolean = false) {
+    GlassDialog(onDismiss = onDismiss, surfaceAlpha = if (isVideo) 0.78f else 0.92f) {
         val contentColor = LocalAppColors.current.textPrimary
         Text(
             "Set wallpaper",
@@ -507,8 +508,9 @@ fun FolderPickerDialog(
     folders: List<Pair<String, String>>,
     onPick: (String) -> Unit,
     onDismiss: () -> Unit,
+    isVideo: Boolean = false,
 ) {
-    GlassDialog(onDismiss = onDismiss) {
+    GlassDialog(onDismiss = onDismiss, surfaceAlpha = if (isVideo) 0.78f else 0.92f) {
         val contentColor = LocalAppColors.current.textPrimary
         Text(
             "Move to…",
@@ -545,7 +547,7 @@ fun FolderPickerDialog(
 // ---- Shared dialog chrome -----------------------------------------------------
 
 @Composable
-private fun GlassDialog(onDismiss: () -> Unit, content: @Composable () -> Unit) {
+private fun GlassDialog(onDismiss: () -> Unit, surfaceAlpha: Float = 0.92f, content: @Composable () -> Unit) {
     val currentBackdrop = com.gorilla.gallery.ui.theme.LocalLiquidGlassContentBackdrop.current ?: com.gorilla.gallery.ui.theme.LocalLiquidGlassBackdrop.current
 
     com.gorilla.gallery.ui.components.AnimatedGlassDialog(
@@ -555,7 +557,7 @@ private fun GlassDialog(onDismiss: () -> Unit, content: @Composable () -> Unit) 
             depth = GlassDepth.MID,
             shape = RoundedCornerShape(28.dp),
             backdrop = currentBackdrop,
-            surfaceColor = DesignTokens.BgSurface.copy(alpha = 0.92f),
+            surfaceColor = DesignTokens.BgSurface.copy(alpha = surfaceAlpha),
             saturationOverride = 1.55f,
             tintAlphaOverride = 0.07f,
             modifier = Modifier
@@ -569,7 +571,7 @@ private fun GlassDialog(onDismiss: () -> Unit, content: @Composable () -> Unit) 
                     onClick = {},
                 ),
         ) {
-            Column(Modifier.padding(start = 20.dp, top = 20.dp, end = 20.dp, bottom = 8.dp)) { content() }
+            Column(Modifier.padding(20.dp)) { content() }
         }
     }
 }
@@ -586,10 +588,17 @@ private fun DialogButtons(
             modifier = Modifier.align(Alignment.CenterEnd),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            val contentColor = MaterialTheme.colorScheme.primary
-            TextButton(onClick = onDismiss) { Text("Cancel", color = contentColor) }
+            com.gorilla.gallery.ui.components.DialogPillButton(
+                text = "Cancel",
+                onClick = onDismiss
+            )
             if (confirmLabel != null) {
-                TextButton(onClick = onConfirm, enabled = confirmEnabled) { Text(confirmLabel, color = contentColor) }
+                com.gorilla.gallery.ui.components.DialogPillButton(
+                    text = confirmLabel,
+                    onClick = onConfirm,
+                    enabled = confirmEnabled,
+                    isPrimary = true
+                )
             }
         }
     }

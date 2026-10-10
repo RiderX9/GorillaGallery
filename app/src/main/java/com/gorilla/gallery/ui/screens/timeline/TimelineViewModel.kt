@@ -63,7 +63,12 @@ class TimelineViewModel(
                     val sections = if (mode == "Date Taken" || mode == "Date Modified") {
                         com.gorilla.gallery.ui.screens.timeline.groupByDate(ordered, granularity, ascending)
                     } else {
-                        listOf(MediaSection(mode, mode, ordered))
+                        val headerLabel = if (granularity == com.gorilla.gallery.data.settings.DateGranularity.ALL) "" else when (mode) {
+                            "Name (A-Z)" -> if (ascending) "Name (A-Z)" else "Name (Z-A)"
+                            "File Size" -> if (ascending) "File Size ↑" else "File Size ↓"
+                            else -> mode
+                        }
+                        listOf(MediaSection(mode, headerLabel, ordered))
                     }
                     TimelineUiState.Content(sections)
                 }

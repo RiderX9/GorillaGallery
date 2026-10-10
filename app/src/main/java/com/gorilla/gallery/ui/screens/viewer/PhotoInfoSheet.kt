@@ -57,6 +57,10 @@ import com.gorilla.gallery.ui.theme.LocalAppColors
 import com.gorilla.gallery.ui.theme.DesignTokens
 import com.gorilla.gallery.ui.theme.pressScale
 import androidx.compose.ui.Alignment
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import androidx.lifecycle.viewModelScope
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -321,28 +325,71 @@ fun PhotoInfoSheet(app: AppViewModel, item: MediaItem, onDismiss: () -> Unit, on
                         .clip(RoundedCornerShape(19.dp))
                         .clickable(interactionSource = searchInteractionSource, indication = null) {
                             onDismiss()
-                            val lensIntent = Intent(Intent.ACTION_SEND).apply {
-                                type = "image/*"
-                                putExtra(Intent.EXTRA_STREAM, item.uri)
-                                setClassName(
-                                    "com.google.android.googlequicksearchbox",
-                                    "com.google.android.apps.search.lens.LensShareEntryPointActivity"
-                                )
-                            }
-                            try {
-                                context.startActivity(lensIntent)
-                            } catch (e: Exception) {
-                                // Fallback to disambiguation if the specific component fails
-                                val fallbackIntent = Intent(Intent.ACTION_SEND).apply {
+                            
+                            val launchLens = { shareUri: android.net.Uri ->
+                                android.util.Log.d("LensDebug", "Launching Lens with URI: $shareUri")
+                                val lensIntent = Intent(Intent.ACTION_SEND).apply {
                                     type = "image/*"
-                                    putExtra(Intent.EXTRA_STREAM, item.uri)
-                                    setPackage("com.google.android.googlequicksearchbox")
+                                    putExtra(Intent.EXTRA_STREAM, shareUri)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    setClassName(
+                                        "com.google.android.googlequicksearchbox",
+                                        "com.google.android.apps.search.lens.LensShareEntryPointActivity"
+                                    )
                                 }
                                 try {
-                                    context.startActivity(fallbackIntent)
-                                } catch (e2: Exception) {
-                                    // ignore
+                                    context.startActivity(lensIntent)
+                                    android.util.Log.d("LensDebug", "Primary Lens activity started.")
+                                } catch (e: Exception) {
+                                    android.util.Log.e("LensDebug", "Primary Lens intent failed", e)
+                                    val fallbackIntent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "image/*"
+                                        putExtra(Intent.EXTRA_STREAM, shareUri)
+                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        setPackage("com.google.android.googlequicksearchbox")
+                                    }
+                                    try {
+                                        context.startActivity(fallbackIntent)
+                                        android.util.Log.d("LensDebug", "Fallback Lens activity started.")
+                                    } catch (e2: Exception) {
+                                        android.util.Log.e("LensDebug", "Fallback Lens intent failed", e2)
+                                    }
                                 }
+                            }
+
+                            if (item.isVideo) {
+                                android.util.Log.d("LensDebug", "Item is video, extracting frame...")
+                                app.viewModelScope.launch(Dispatchers.IO) {
+                                    try {
+                                        val frame = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                            app.videoTextureViews[item.id]?.bitmap
+                                        }
+                                        
+                                        if (frame != null) {
+                                            android.util.Log.d("LensDebug", "Frame extracted successfully: ${frame.width}x${frame.height}")
+                                            context.cacheDir.listFiles { _, name -> name.startsWith("lens_video_thumb") }?.forEach { it.delete() }
+                                            val cacheFile = java.io.File(context.cacheDir, "lens_video_thumb_${System.currentTimeMillis()}.jpg")
+                                            cacheFile.outputStream().use { out ->
+                                                frame.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, out)
+                                            }
+                                            val contentUri = androidx.core.content.FileProvider.getUriForFile(
+                                                context,
+                                                "${context.packageName}.fileprovider",
+                                                cacheFile
+                                            )
+                                            withContext(Dispatchers.Main) {
+                                                launchLens(contentUri)
+                                            }
+                                        } else {
+                                            android.util.Log.e("LensDebug", "Extracted frame is NULL!")
+                                        }
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("LensDebug", "Exception extracting frame", e)
+                                    }
+                                }
+                            } else {
+                                android.util.Log.d("LensDebug", "Item is photo, launching directly...")
+                                launchLens(item.uri)
                             }
                         }
                 ) {

@@ -25,7 +25,7 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Camera
-import androidx.compose.material.icons.rounded.PanoramaHorizontal
+import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.SearchOff
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -47,6 +47,13 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.draw.rotate
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Eco
+import androidx.compose.material.icons.rounded.Pets
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -71,9 +78,11 @@ fun SearchScreen(
     onOpenVideos: () -> Unit = {},
     onOpenFavorites: () -> Unit = {},
     onOpenRaw: () -> Unit = {},
-    onOpenPanoramas: () -> Unit = {},
+    onOpenDocuments: () -> Unit = {},
     onOpenPersonDetail: (Int) -> Unit = {},
     onOpenSeeAllPeople: () -> Unit = {},
+    onOpenNature: () -> Unit = {},
+    onOpenPets: () -> Unit = {},
     vm: SearchViewModel = viewModel(factory = SearchViewModel.Factory),
 ) {
     val query by vm.query.collectAsStateWithLifecycle()
@@ -99,9 +108,11 @@ fun SearchScreen(
                     onOpenVideos = onOpenVideos,
                     onOpenFavorites = onOpenFavorites,
                     onOpenRaw = onOpenRaw,
-                    onOpenPanoramas = onOpenPanoramas,
+                    onOpenDocuments = onOpenDocuments,
                     onOpenPersonDetail = onOpenPersonDetail,
                     onOpenSeeAllPeople = onOpenSeeAllPeople,
+                    onOpenNature = onOpenNature,
+                    onOpenPets = onOpenPets,
                 )
                 results.isEmpty() -> EmptyState(
                     title = "No results",
@@ -144,6 +155,11 @@ fun SearchScreen(
                 onQueryChange = vm::setQuery,
                 onClear = { vm.setQuery("") },
                 autoFocus = autoFocus,
+                onSearch = { 
+                    vm.addRecentSearch(query)
+                    focusManager.clearFocus(force = true)
+                    keyboardController?.hide()
+                },
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).padding(bottom = 8.dp),
             )
         }
@@ -156,6 +172,7 @@ private fun SearchBar(
     onQueryChange: (String) -> Unit,
     onClear: () -> Unit,
     autoFocus: Boolean,
+    onSearch: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val interaction = remember { MutableInteractionSource() }
@@ -196,7 +213,8 @@ private fun SearchBar(
         ),
         singleLine = true,
         interactionSource = interaction,
-        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Search)
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { onSearch() })
     )
 }
 
@@ -219,17 +237,31 @@ private fun SearchCategories(
     onOpenVideos: () -> Unit = {},
     onOpenFavorites: () -> Unit = {},
     onOpenRaw: () -> Unit = {},
-    onOpenPanoramas: () -> Unit = {},
+    onOpenDocuments: () -> Unit = {},
     onOpenPersonDetail: (Int) -> Unit = {},
     onOpenSeeAllPeople: () -> Unit = {},
+    onOpenNature: () -> Unit = {},
+    onOpenPets: () -> Unit = {},
 ) {
     val peopleCategories by vm.peopleCategories.collectAsStateWithLifecycle()
+    val recentSearches by vm.recentSearches.collectAsStateWithLifecycle()
 
     androidx.compose.foundation.lazy.LazyColumn(
         contentPadding = contentPadding,
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(26.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        if (recentSearches.isNotEmpty()) {
+            item {
+                RecentSearchesRow(
+                    searches = recentSearches,
+                    onClear = { vm.clearRecentSearches() },
+                    onRemove = { vm.removeRecentSearch(it) },
+                    onClick = { vm.setQuery(it) }
+                )
+            }
+        }
+
         item {
             CategorySection(
                 eyebrow = "CATEGORIES",
@@ -240,7 +272,20 @@ private fun SearchCategories(
                     onOpenVideos = onOpenVideos,
                     onOpenFavorites = onOpenFavorites,
                     onOpenRaw = onOpenRaw,
-                    onOpenPanoramas = onOpenPanoramas,
+                    onOpenDocuments = onOpenDocuments,
+                )
+            }
+        }
+
+        item {
+            CategorySection(
+                eyebrow = "SUBJECTS",
+                title = "Showcase",
+                showSeeAll = false
+            ) {
+                SubjectsGrid(
+                    onOpenNature = onOpenNature,
+                    onOpenPets = onOpenPets,
                 )
             }
         }
@@ -285,7 +330,7 @@ private fun MediaTypesGrid(
     onOpenVideos: () -> Unit = {},
     onOpenFavorites: () -> Unit = {},
     onOpenRaw: () -> Unit = {},
-    onOpenPanoramas: () -> Unit = {},
+    onOpenDocuments: () -> Unit = {},
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -297,7 +342,7 @@ private fun MediaTypesGrid(
                 icon = Icons.Rounded.PlayArrow,
                 iconColor = Color(0xFF38BDF8),
                 iconBg = Color(0xFF38BDF8).copy(alpha = 0.14f),
-                modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f),
                 onClick = onOpenVideos,
             )
             MediaTypeTile(
@@ -305,7 +350,7 @@ private fun MediaTypesGrid(
                 icon = Icons.Rounded.FavoriteBorder,
                 iconColor = Color(0xFFFB7185),
                 iconBg = Color(0xFFFB7185).copy(alpha = 0.14f),
-                modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f),
                 onClick = onOpenFavorites,
             )
         }
@@ -315,16 +360,16 @@ private fun MediaTypesGrid(
                 icon = Icons.Rounded.Camera,
                 iconColor = Color(0xFF34D399),
                 iconBg = Color(0xFF34D399).copy(alpha = 0.14f),
-                modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f),
                 onClick = onOpenRaw,
             )
             MediaTypeTile(
-                title = "Panoramas",
-                icon = Icons.Rounded.PanoramaHorizontal,
+                title = "Documents",
+                icon = Icons.Rounded.Description,
                 iconColor = Color(0xFFF0ABFC),
                 iconBg = Color(0xFFF0ABFC).copy(alpha = 0.14f),
-                modifier = Modifier.weight(1f),
-                onClick = onOpenPanoramas,
+            modifier = Modifier.weight(1f),
+                onClick = onOpenDocuments,
             )
         }
     }
@@ -333,7 +378,8 @@ private fun MediaTypesGrid(
 @Composable
 private fun MediaTypeTile(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, iconColor: Color, iconBg: Color, modifier: Modifier = Modifier, onClick: () -> Unit = {}) {
     val appColors = LocalAppColors.current
-    val interactionSource = remember { MutableInteractionSource() }
+    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    
     Box(
         modifier = modifier
             .pressScale(0.94f)
@@ -341,11 +387,7 @@ private fun MediaTypeTile(title: String, icon: androidx.compose.ui.graphics.vect
             .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
             .background(appColors.bgSurface.copy(alpha = 0.85f))
             .border(1.dp, appColors.borderGlass, androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick
-            )
+            .clickable(interactionSource = interactionSource, indication = null) { onClick() }
     ) {
         Row(Modifier.fillMaxSize().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(28.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(9.dp)).background(iconBg), contentAlignment = Alignment.Center) {
@@ -357,3 +399,159 @@ private fun MediaTypeTile(title: String, icon: androidx.compose.ui.graphics.vect
     }
 }
 
+
+@Composable
+private fun RecentSearchesRow(
+    searches: List<String>,
+    onClear: () -> Unit,
+    onRemove: (String) -> Unit,
+    onClick: (String) -> Unit
+) {
+    val appColors = LocalAppColors.current
+    Column(Modifier.fillMaxWidth().padding(bottom = 0.dp)) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("RECENT SEARCHES", fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp, color = appColors.textSecondary)
+            Text("Clear", fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = LocalDynamicColors.current.accent, modifier = Modifier.clickable { onClear() })
+        }
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()).padding(horizontal = 20.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            searches.forEach { search ->
+                androidx.compose.runtime.key(search) {
+                    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                    Row(
+                        modifier = Modifier
+                            .pressScale(0.94f)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(appColors.bgSurface.copy(alpha = 0.65f))
+                            .border(1.dp, appColors.borderGlass, RoundedCornerShape(18.dp))
+                            .clickable(interactionSource = interactionSource, indication = null) { onClick(search) }
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.Rounded.History, contentDescription = null, tint = appColors.textSecondary, modifier = Modifier.size(13.dp))
+                        Text(search, color = appColors.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                        Box(
+                            modifier = Modifier
+                                .size(18.dp)
+                                .clip(androidx.compose.foundation.shape.CircleShape)
+                                .background(Color.White.copy(alpha = 0.08f))
+                                .clickable { onRemove(search) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Rounded.Close, contentDescription = null, tint = appColors.textSecondary, modifier = Modifier.size(10.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SubjectsGrid(
+    onOpenNature: () -> Unit,
+    onOpenPets: () -> Unit
+) {
+    val appColors = com.gorilla.gallery.ui.theme.LocalAppColors.current
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .clip(RoundedCornerShape(22.dp))
+            .background(appColors.bgSurface.copy(alpha = 0.65f))
+            .border(1.dp, appColors.borderGlass, RoundedCornerShape(22.dp))
+    ) {
+        SubjectRowItem(
+            title = "Nature",
+            subtitle = "Plants, flowers & outdoors",
+            icon = Icons.Rounded.Eco,
+            iconColor = Color(0xFF34D399),
+            iconBg = Color(0xFF34D399).copy(alpha = 0.14f),
+            iconBorder = Color(0xFF34D399).copy(alpha = 0.28f),
+            onClick = onOpenNature
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 64.dp, end = 16.dp)
+                .height(0.5.dp)
+                .background(appColors.textSecondary.copy(alpha = 0.18f))
+        )
+
+        SubjectRowItem(
+            title = "Pets",
+            subtitle = "Cats, dogs, companions",
+            icon = Icons.Rounded.Pets,
+            iconColor = Color(0xFFFBBF24),
+            iconBg = Color(0xFFFBBF24).copy(alpha = 0.14f),
+            iconBorder = Color(0xFFFBBF24).copy(alpha = 0.28f),
+            onClick = onOpenPets
+        )
+    }
+}
+
+@Composable
+private fun SubjectRowItem(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconColor: Color,
+    iconBg: Color,
+    iconBorder: Color,
+    onClick: () -> Unit
+) {
+    val appColors = com.gorilla.gallery.ui.theme.LocalAppColors.current
+    val haptic = com.gorilla.gallery.ui.theme.rememberHaptic()
+    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .pressScale(0.94f)
+            .clickable(interactionSource = interactionSource, indication = null) { haptic(); onClick() }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(iconBg)
+                .border(1.dp, iconBorder, RoundedCornerShape(12.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(18.dp))
+        }
+        
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(title, color = appColors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.1).sp)
+
+            }
+            Text(subtitle, color = appColors.textSecondary, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        }
+        
+        Icon(
+            Icons.Rounded.ChevronRight,
+            contentDescription = null,
+            tint = appColors.textSecondary.copy(alpha = 0.5f),
+            modifier = Modifier.size(14.dp)
+        )
+    }
+}

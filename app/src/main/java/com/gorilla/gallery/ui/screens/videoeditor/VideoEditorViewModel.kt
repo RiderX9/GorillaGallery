@@ -95,6 +95,7 @@ class VideoEditorViewModel(private val container: AppContainer) : ViewModel() {
                 )
             }.onSuccess {
                 app.showSnackbar.tryEmit("Video overwritten")
+                container.thumbnailRepository.evict(item.id)
                 container.mediaRepository.scan()
                 onDone()
             }.onFailure {

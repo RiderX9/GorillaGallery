@@ -1,0 +1,15 @@
+--- app/src/main/java/com/gorilla/gallery/ui/AppViewModel.kt
++++ app/src/main/java/com/gorilla/gallery/ui/AppViewModel.kt
+@@ -419,6 +419,12 @@
+             }
+         }
+     }
++
++    fun requestWriteConsent(uri: android.net.Uri, onGranted: suspend () -> Unit) {
++        pendingWriteAction = onGranted
++        val sender = android.provider.MediaStore.createWriteRequest(container.context.contentResolver, listOf(uri)).intentSender
++        _pendingConsent.tryEmit(ConsentRequest.Write(sender))
++    }
+ 
+     fun toggleFavorite(item: MediaItem) {
+         viewModelScope.launch {

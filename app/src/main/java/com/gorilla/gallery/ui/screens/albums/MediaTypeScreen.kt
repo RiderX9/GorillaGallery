@@ -1,6 +1,7 @@
 package com.gorilla.gallery.ui.screens.albums
 
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.background
 
 import androidx.compose.runtime.getValue
 
@@ -90,10 +91,9 @@ fun MediaTypeScreen(
     var headerHeightPx by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     val topPadding = with(androidx.compose.ui.platform.LocalDensity.current) { headerHeightPx.toDp() }
     val gridBackdrop = com.kyant.backdrop.backdrops.rememberLayerBackdrop()
-    var gridColumns by remember { mutableStateOf(settings.gridColumns) }
 
     Box(Modifier.fillMaxSize()) {
-        Box(Modifier.layerBackdrop(gridBackdrop)) {
+        Box(Modifier.layerBackdrop(gridBackdrop).background(com.gorilla.gallery.ui.theme.DesignTokens.BgBase)) {
             com.gorilla.gallery.ui.components.SortTransition(
                 sortState = Pair(sortMode, sortAscending),
                 contentKey = { it }
@@ -128,14 +128,19 @@ fun MediaTypeScreen(
                         if (currentSortMode == "Date Taken" || currentSortMode == "Date Modified") {
                             groupByGranularity(currentItems, settings.dateGranularity)
                         } else {
-                            listOf(MediaSection(key = "", label = "", items = currentItems))
+                            val headerLabel = if (settings.dateGranularity == com.gorilla.gallery.data.settings.DateGranularity.ALL) "" else when (currentSortMode) {
+                                "Name (A-Z)" -> if (currentSortAscending) "Name (A-Z)" else "Name (Z-A)"
+                                "File Size" -> if (currentSortAscending) "File Size ↑" else "File Size ↓"
+                                else -> currentSortMode
+                            }
+                            listOf(MediaSection(currentSortMode, headerLabel, currentItems))
                         }
                     },
-                    columns = gridColumns,
+                    columns = settings.gridColumns,
                     selectionMode = selectionMode,
                     selectedIds = selected,
                     highQualityThumbnails = settings.highQualityThumbnails,
-                    onColumnsChange = { gridColumns = it },
+                    onColumnsChange = { app.setGridColumns(it) },
                     onClick = { item, bounds ->
                         if (selectionMode) {
                             selected = if (item.id in selected) selected - item.id else selected + item.id
@@ -193,6 +198,14 @@ fun MediaTypeScreen(
         ) {
             SelectionActionBar(
                 count = selected.size,
+                allSelected = filteredItems.isNotEmpty() && selected.size == filteredItems.size,
+                onSelectAll = {
+                    if (selected.size == filteredItems.size) {
+                        clear()
+                    } else {
+                        selected = filteredItems.map { it.id }.toSet()
+                    }
+                },
                 onFavorite = { selectedItems.forEach { app.toggleFavorite(it) }; clear() },
                 onShare = { shareItems(context, selectedItems) },
                 onSecure = { if (skipConfirm) { app.moveToSecure(selectedItems); clear() } else { showSecureConfirm = selectedItems } },

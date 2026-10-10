@@ -1,0 +1,59 @@
+--- app/src/main/java/com/gorilla/gallery/ui/screens/videoeditor/VideoEditorViewModel.kt
++++ app/src/main/java/com/gorilla/gallery/ui/screens/videoeditor/VideoEditorViewModel.kt
+@@ -107,24 +107,25 @@
+         onDone: () -> Unit,
+     ) {
+         if (_saving.value) return
+-        viewModelScope.launch {
+-            _saving.value = true
+-            runCatching {
+-                repo.saveEditedCopy(
+-                    item = item,
+-                    startMs = startMs,
+-                    endMs = endMs,
+-                    removeAudio = muted || replacementAudioUri != null,
+-                    replacementAudioUri = replacementAudioUri,
+-                    audioStartMs = audioStartMs,
+-                    cropRect = cropRect,
+-                    filterPreset = filterPreset,
+-                    rotationDegrees = rotationDegrees,
+-                    overwrite = true,
+-                )
+-            }.onSuccess {
+-                app.showSnackbar.tryEmit("Video overwritten")
+-                container.mediaRepository.scan()
+-                onDone()
+-            }.onFailure {
+-                app.showSnackbar.tryEmit("Video export failed")
+-            }
+-            _saving.value = false
+-        }
++        app.requestWriteConsent(item.uri) {
++            viewModelScope.launch {
++                _saving.value = true
++                runCatching {
++                    repo.saveEditedCopy(
++                        item = item,
++                        startMs = startMs,
++                        endMs = endMs,
++                        removeAudio = muted || replacementAudioUri != null,
++                        replacementAudioUri = replacementAudioUri,
++                        audioStartMs = audioStartMs,
++                        cropRect = cropRect,
++                        filterPreset = filterPreset,
++                        rotationDegrees = rotationDegrees,
++                        overwrite = true,
++                    )
++                }.onSuccess {
++                    app.showSnackbar.tryEmit("Video overwritten")
++                    container.mediaRepository.scan()
++                    onDone()
++                }.onFailure {
++                    app.showSnackbar.tryEmit("Video export failed")
++                }
++                _saving.value = false
++            }
++        }
+     }
+ 
+     companion object {

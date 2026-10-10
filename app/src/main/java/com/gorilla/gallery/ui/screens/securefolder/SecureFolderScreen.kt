@@ -1,6 +1,7 @@
 package com.gorilla.gallery.ui.screens.securefolder
 
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.navigationBarsPadding
 
 import androidx.compose.runtime.getValue
@@ -121,7 +122,7 @@ fun SecureFolderScreen(
                     )
                 }
             } else {
-                Box(Modifier.layerBackdrop(gridBackdrop)) {
+                Box(Modifier.layerBackdrop(gridBackdrop).background(com.gorilla.gallery.ui.theme.DesignTokens.BgBase)) {
                     com.gorilla.gallery.ui.components.SortTransition(
                         sortState = Pair(sortMode, sortAscending),
                         contentKey = { it }
@@ -150,7 +151,14 @@ fun SecureFolderScreen(
                         MediaGrid(
                             viewerOpen = viewerOpen,
                             focusedItem = focusedItem,
-                            sections = if (currentItems.isEmpty()) emptyList() else listOf(MediaSection("secure", "", currentItems)),
+                            sections = if (currentItems.isEmpty()) emptyList() else if (currentSortMode == "Date Taken" || currentSortMode == "Date Modified") com.gorilla.gallery.ui.screens.timeline.groupByDate(currentItems, settings.dateGranularity, currentSortAscending) else {
+                                val headerLabel = if (settings.dateGranularity == com.gorilla.gallery.data.settings.DateGranularity.ALL) "" else when (currentSortMode) {
+                                    "Name (A-Z)" -> if (currentSortAscending) "Name (A-Z)" else "Name (Z-A)"
+                                    "File Size" -> if (currentSortAscending) "File Size ↑" else "File Size ↓"
+                                    else -> currentSortMode
+                                }
+                                listOf(MediaSection(currentSortMode, headerLabel, currentItems))
+                            },
                             columns = settings.gridColumns,
                             selectionMode = selectionMode,
                             selectedIds = selected,
@@ -189,6 +197,14 @@ fun SecureFolderScreen(
                 ) {
                     com.gorilla.gallery.ui.components.InternalSelectionActionBar(
                         count = selected.size,
+                        allSelected = filteredItems.isNotEmpty() && selected.size == filteredItems.size,
+                        onSelectAll = {
+                            if (selected.size == filteredItems.size) {
+                                clearSelection()
+                            } else {
+                                selected = filteredItems.map { it.id }.toSet()
+                            }
+                        },
                         onShare = {
                             com.gorilla.gallery.ui.components.shareItems(context, selectedItems)
                         },

@@ -28,13 +28,17 @@ data class MediaItem(
     val bucketId: Long,           // auto-album key
     val bucketName: String,
     val relativePath: String,
+    val absolutePath: String,
     val orientation: Int,
     val isFavorite: Boolean = false,
     val secureId: String? = null, // non-null when loaded from the Secure Folder
     val trashId: String? = null,  // non-null when loaded from the Trash
 ) {
     val isVideo: Boolean get() = type == MediaType.VIDEO
-    val format: String get() = mimeType.substringAfterLast('/').uppercase()
+    val format: String get() {
+        val f = mimeType.substringAfterLast('/').uppercase()
+        return if (f.contains("DNG") || f.contains("RAW")) "RAW" else f
+    }
     val isSecured: Boolean get() = secureId != null
     val isScreenshot: Boolean
         get() {

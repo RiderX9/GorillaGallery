@@ -204,6 +204,7 @@ class MediaStoreRepository(
             val bucketIdC = c.getColumnIndexOrThrow(FileColumns.BUCKET_ID)
             val bucketNameC = c.getColumnIndexOrThrow(FileColumns.BUCKET_DISPLAY_NAME)
             val relC = c.getColumnIndexOrThrow(FileColumns.RELATIVE_PATH)
+            val dataC = c.getColumnIndexOrThrow(android.provider.MediaStore.MediaColumns.DATA)
             val orientC = c.getColumnIndexOrThrow(FileColumns.ORIENTATION)
             val durC = c.getColumnIndexOrThrow(FileColumns.DURATION)
             val typeC = c.getColumnIndexOrThrow(FileColumns.MEDIA_TYPE)
@@ -218,7 +219,14 @@ class MediaStoreRepository(
                     MediaStore.Images.Media.EXTERNAL_CONTENT_URI
                 }
                 val dateAdded = c.getLong(addedC)
-                val dateTaken = c.getLong(takenC).takeIf { it > 0 } ?: (dateAdded * 1000)
+                val dateModified = c.getLong(modC)
+                val fallbackDate = if (dateModified > 0 && dateModified < dateAdded) dateModified else dateAdded
+                val dateTaken = c.getLong(takenC).takeIf { it > 0 } ?: (fallbackDate * 1000)
+                val sizeBytes = c.getLong(sizeC)
+                val rawDuration = if (isVideo) c.getLong(durC) else 0L
+                // Heuristic to fix corrupt MediaStore durations (e.g. 1-frame MP4s incorrectly tagged as 13 hours)
+                // A video under 1MB claiming to be over 1 minute is mathematically impossible with standard codecs.
+                val durationMs = if (isVideo && sizeBytes < 1_000_000 && rawDuration > 60_000) 0L else rawDuration
                 out += MediaItem(
                     id = id,
                     uri = ContentUris.withAppendedId(collectionUri, id),
@@ -228,13 +236,14 @@ class MediaStoreRepository(
                     dateTakenMs = dateTaken,
                     dateAddedSec = dateAdded,
                     dateModifiedSec = c.getLong(modC),
-                    sizeBytes = c.getLong(sizeC),
+                    sizeBytes = sizeBytes,
                     width = c.getInt(wC),
                     height = c.getInt(hC),
-                    durationMs = if (isVideo) c.getLong(durC) else 0L,
+                    durationMs = durationMs,
                     bucketId = c.getLong(bucketIdC),
                     bucketName = c.getString(bucketNameC) ?: "Unknown",
                     relativePath = c.getString(relC) ?: "",
+                    absolutePath = c.getString(dataC) ?: "",
                     orientation = c.getInt(orientC),
                 )
             }
@@ -331,6 +340,21 @@ class MediaStoreRepository(
             mediaDao.updateMetadata(id, displayName, dateTakenMs, dateTakenMs / 1000)
         } else {
             mediaDao.updateDisplayName(id, displayName)
+        }
+    }
+
+    /** Force-refresh a single item from MediaStore into Room, useful when DATE_MODIFIED doesn't change (e.g. moves). */
+    suspend fun refreshItem(id: Long) = withContext(Dispatchers.IO) {
+        val fresh = queryItems(
+            resolver.query(
+                MEDIA_COLLECTION, MEDIA_PROJECTION,
+                "$MEDIA_SELECTION AND ${FileColumns._ID} = ?",
+                arrayOf(*MEDIA_ARGS, id.toString()),
+                null
+            )
+        ).firstOrNull()
+        if (fresh != null) {
+            mediaDao.upsertAll(listOf(MediaEntity.from(fresh)))
         }
     }
 
@@ -484,7 +508,7 @@ class MediaStoreRepository(
             FileColumns.DATE_TAKEN, FileColumns.WIDTH, FileColumns.HEIGHT,
             FileColumns.BUCKET_ID, FileColumns.BUCKET_DISPLAY_NAME,
             FileColumns.RELATIVE_PATH, FileColumns.ORIENTATION,
-            FileColumns.DURATION, FileColumns.MEDIA_TYPE,
+            FileColumns.DURATION, FileColumns.MEDIA_TYPE, android.provider.MediaStore.MediaColumns.DATA,
         )
         private const val MEDIA_SELECTION = "${FileColumns.MEDIA_TYPE} IN (?, ?)"
         private val MEDIA_ARGS = arrayOf(

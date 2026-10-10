@@ -65,8 +65,8 @@ private fun LiquidGlassNavigationBar(
         selectedIndex = selectedIndex,
         onSelected = { index -> 
             val dest = Destination.bottomBar.getOrNull(index)
-            if (dest != null && dest != current) {
-                haptic()
+            if (dest != null) {
+                if (dest != current) haptic()
                 onSelect(dest)
             }
         },
@@ -83,10 +83,8 @@ private fun LiquidGlassNavigationBar(
 
             FloatingBottomBarItem(
                 onClick = {
-                    if (!isSelected) {
-                        haptic()
-                        onSelect(dest)
-                    }
+                    if (!isSelected) haptic()
+                    onSelect(dest)
                 },
                 modifier = Modifier.defaultMinSize(minWidth = 76.dp)
             ) {
@@ -180,8 +178,8 @@ fun GlassNavigationRail(
         selectedIndex = selectedIndex,
         onSelected = { index -> 
             val dest = destinations.getOrNull(index)
-            if (dest != null && dest != current) {
-                haptic()
+            if (dest != null) {
+                if (dest != current) haptic()
                 onSelect(dest)
             }
         },
@@ -198,10 +196,8 @@ fun GlassNavigationRail(
 
             FloatingSideBarItem(
                 onClick = {
-                    if (!isSelected) {
-                        haptic()
-                        onSelect(dest)
-                    }
+                    if (!isSelected) haptic()
+                    onSelect(dest)
                 },
                 modifier = Modifier.defaultMinSize(minHeight = 68.dp)
             ) {

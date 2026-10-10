@@ -360,6 +360,22 @@ private fun GeneralSection(settings: AppSettings, vm: SettingsViewModel, searchL
                 )
             )
         }
+
+        if ("scroll bar fast scrollbar draggable aves".contains(searchLower)) {
+            add(
+                GlassSettingsItem(
+                    title = "Fast Scroll Bar",
+                    subtitle = "Show a draggable scroll bar with date bubble in media grids",
+                    icon = Icons.Rounded.UnfoldMore,
+                    trailingContent = {
+                        androidx.compose.material3.Switch(
+                            checked = settings.showScrollbar,
+                            onCheckedChange = { vm.setShowScrollbar(it) }
+                        )
+                    }
+                )
+            )
+        }
     }
 
     if (items.isNotEmpty()) {
@@ -533,9 +549,60 @@ private fun AboutSection(searchLower: String, modifier: Modifier = Modifier) {
                                     val tag = obj.getString("tag_name").removePrefix("v").removePrefix("V")
                                     val htmlUrl = obj.getString("html_url")
                                     val current = BuildConfig.VERSION_NAME.removePrefix("v").removePrefix("V")
+                                    
+                                    val supportedAbis = android.os.Build.SUPPORTED_ABIS
+                                    var bestApkUrl = ""
+                                    var fallbackApkUrl = ""
+                                    
+                                    val assets = obj.optJSONArray("assets")
+                                    if (assets != null) {
+                                        val apkAssets = mutableListOf<org.json.JSONObject>()
+                                        for (i in 0 until assets.length()) {
+                                            val asset = assets.getJSONObject(i)
+                                            if (asset.getString("name").lowercase().endsWith(".apk")) {
+                                                apkAssets.add(asset)
+                                            }
+                                        }
+                                        
+                                        if (apkAssets.isNotEmpty()) {
+                                            fallbackApkUrl = apkAssets.first().getString("browser_download_url")
+                                            for (asset in apkAssets) {
+                                                if (asset.getString("name").lowercase().contains("universal")) {
+                                                    fallbackApkUrl = asset.getString("browser_download_url")
+                                                    break
+                                                }
+                                            }
+                                            
+                                            abiLoop@ for (abi in supportedAbis) {
+                                                val abiLower = abi.lowercase()
+                                                for (asset in apkAssets) {
+                                                    val name = asset.getString("name").lowercase()
+                                                    if (abiLower.contains("arm64") && name.contains("arm64")) {
+                                                        bestApkUrl = asset.getString("browser_download_url")
+                                                        break@abiLoop
+                                                    }
+                                                    if (abiLower.contains("v7a") && (name.contains("arm7") || name.contains("v7a") || name.contains("armeabi"))) {
+                                                        bestApkUrl = asset.getString("browser_download_url")
+                                                        break@abiLoop
+                                                    }
+                                                    if (abiLower.contains("x86_64") && (name.contains("x86_64") || name.contains("x86-64"))) {
+                                                        bestApkUrl = asset.getString("browser_download_url")
+                                                        break@abiLoop
+                                                    }
+                                                    if (abiLower == "x86" && name.contains("x86") && !name.contains("64")) {
+                                                        bestApkUrl = asset.getString("browser_download_url")
+                                                        break@abiLoop
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
+                                    val finalUrl = if (bestApkUrl.isNotEmpty()) bestApkUrl else if (fallbackApkUrl.isNotEmpty()) fallbackApkUrl else htmlUrl
+
                                     if (com.gorilla.gallery.utils.VersionUtils.isNewerVersion(current, tag)) {
                                         updateVersion = tag
-                                        updateUrl = htmlUrl
+                                        updateUrl = finalUrl
                                         showUpdateDialog = true
                                     } else {
                                         withContext(Dispatchers.Main) {
@@ -571,6 +638,32 @@ private fun AboutSection(searchLower: String, modifier: Modifier = Modifier) {
         }
     }
 
+    val performDownload = {
+        if (updateUrl.endsWith(".apk")) {
+            try {
+                val request = android.app.DownloadManager.Request(android.net.Uri.parse(updateUrl))
+                    .setTitle("Gorilla Gallery Update")
+                    .setDescription("Downloading version $updateVersion")
+                    .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                    .setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, "GorillaGallery-$updateVersion.apk")
+                    .setMimeType("application/vnd.android.package-archive")
+                val downloadManager = context.getSystemService(android.content.Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
+                downloadManager.enqueue(request)
+                android.widget.Toast.makeText(context, "Downloading update... Check notifications", android.widget.Toast.LENGTH_LONG).show()
+            } catch (e: Exception) {
+                open(updateUrl)
+            }
+        } else {
+            open(updateUrl)
+        }
+    }
+
+    val notificationPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) {
+        performDownload()
+    }
+
     if (showLicenses) {
         GlassAlertDialog(
             onDismissRequest = { showLicenses = false },
@@ -588,11 +681,16 @@ private fun AboutSection(searchLower: String, modifier: Modifier = Modifier) {
         GlassAlertDialog(
             onDismissRequest = { showUpdateDialog = false },
             title = "Update Available",
-            text = "Version $updateVersion is available on GitHub. Would you like to download it now?",
+            text = "Version $updateVersion is available. Would you like to download it now?",
             confirmLabel = "Download",
             onConfirm = {
                 showUpdateDialog = false
-                open(updateUrl)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+                    androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                } else {
+                    performDownload()
+                }
             },
             dismissLabel = "Later",
             onDismiss = { showUpdateDialog = false },

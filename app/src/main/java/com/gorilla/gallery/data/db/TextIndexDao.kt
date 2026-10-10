@@ -33,6 +33,18 @@ class TextIndexDao(private val db: AppDatabase) {
         }
     }
 
+    suspend fun getPathsWithMinimumTextLength(minLength: Int): Set<String> = withContext(Dispatchers.IO) {
+        if (!ensureTable()) return@withContext emptySet()
+        db.openHelper.readableDatabase.query(
+            SimpleSQLiteQuery("SELECT imagePath FROM text_index WHERE LENGTH(recognizedText) >= ?", arrayOf<Any>(minLength))
+        ).use { cursor ->
+            buildSet {
+                val pathIndex = cursor.getColumnIndexOrThrow("imagePath")
+                while (cursor.moveToNext()) add(cursor.getString(pathIndex))
+            }
+        }
+    }
+
     suspend fun getText(imagePath: String): String = withContext(Dispatchers.IO) {
         if (!ensureTable()) return@withContext ""
         db.openHelper.readableDatabase.query(

@@ -69,6 +69,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     private val secureRepo = container.secureFolderRepository
     private val editorRepo = container.photoEditorRepository
 
+    val videoTextureViews = java.util.concurrent.ConcurrentHashMap<Long, android.view.TextureView>()
     val settings: StateFlow<AppSettings> =
         settingsRepo.settings.stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
 
@@ -280,30 +281,84 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
             var importedCount = 0
             for (uri in uris) {
                 try {
-                    val cursor = contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+                    val cursor = contentResolver.query(uri, null, null, null, null)
                     var displayName = "imported_${System.currentTimeMillis()}.jpg"
+                    var originalDateMs: Long? = null
+                    
                     if (cursor != null && cursor.moveToFirst()) {
                         val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
                         if (nameIndex != -1) {
                             val name = cursor.getString(nameIndex)
                             if (!name.isNullOrEmpty()) displayName = name
                         }
+                        
+                        // Try to extract any date metadata the provider is willing to share
+                        val dateTakenIdx = cursor.getColumnIndex("datetaken")
+                        val dateModifiedIdx = cursor.getColumnIndex("date_modified")
+                        
+                        if (dateTakenIdx != -1 && !cursor.isNull(dateTakenIdx)) {
+                            val dt = cursor.getLong(dateTakenIdx)
+                            if (dt > 0) originalDateMs = dt
+                        }
+                        if (originalDateMs == null && dateModifiedIdx != -1 && !cursor.isNull(dateModifiedIdx)) {
+                            val dm = cursor.getLong(dateModifiedIdx)
+                            if (dm > 0) originalDateMs = dm * 1000L // date_modified is usually in seconds
+                        }
                         cursor.close()
                     }
-                    val destFile = java.io.File(importDir, displayName)
+                    val importDirObj = java.io.File(importDir, ".temp")
+                    importDirObj.mkdirs()
+                    val tempFile = java.io.File(importDirObj, displayName)
                     
                     contentResolver.openInputStream(uri)?.use { input ->
-                        java.io.FileOutputStream(destFile).use { output ->
+                        java.io.FileOutputStream(tempFile).use { output ->
                             input.copyTo(output)
                         }
                     }
                     
-                    // Trigger media scanner so the repo picks it up
-                    android.media.MediaScannerConnection.scanFile(
-                        container.context,
-                        arrayOf(destFile.absolutePath),
-                        null
-                    ) { _, _ -> }
+                    // If we didn't get an original date from the cursor, try to extract it from the file itself
+                    if (originalDateMs == null || originalDateMs == 0L) {
+                        try {
+                            val lowerName = displayName.lowercase(java.util.Locale.US)
+                            if (lowerName.endsWith(".mp4") || lowerName.endsWith(".mkv") || lowerName.endsWith(".webm") || lowerName.endsWith(".avi")) {
+                                val mmr = android.media.MediaMetadataRetriever()
+                                mmr.setDataSource(tempFile.absolutePath)
+                                val dateStr = mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DATE)
+                                mmr.release()
+                                if (dateStr != null) {
+                                    val sdf = java.text.SimpleDateFormat("yyyyMMdd'T'HHmmss.SSS'Z'", java.util.Locale.US)
+                                    sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                    originalDateMs = sdf.parse(dateStr)?.time
+                                }
+                            } else {
+                                val exif = androidx.exifinterface.media.ExifInterface(tempFile.absolutePath)
+                                val dateTime = exif.getAttribute(androidx.exifinterface.media.ExifInterface.TAG_DATETIME_ORIGINAL)
+                                    ?: exif.getAttribute(androidx.exifinterface.media.ExifInterface.TAG_DATETIME)
+                                if (dateTime != null) {
+                                    val sdf = java.text.SimpleDateFormat("yyyy:MM:dd HH:mm:ss", java.util.Locale.US)
+                                    originalDateMs = sdf.parse(dateTime)?.time
+                                }
+                            }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
+
+                    val mimeType = contentResolver.getType(uri) ?: if (displayName.lowercase(java.util.Locale.US).let { it.endsWith(".mp4") || it.endsWith(".mkv") || it.endsWith(".webm") || it.endsWith(".avi") }) "video/mp4" else "image/jpeg"
+                    val isVideo = mimeType.startsWith("video/")
+                    
+                    // Atomically insert into MediaStore with correct dates so it never flashes at the top
+                    com.gorilla.gallery.data.repo.MediaIo.insertFromFile(
+                        context = container.context,
+                        source = tempFile,
+                        displayName = displayName,
+                        mimeType = mimeType,
+                        type = if (isVideo) com.gorilla.gallery.data.model.MediaType.VIDEO else com.gorilla.gallery.data.model.MediaType.IMAGE,
+                        relativePath = "Pictures/GorillaGallery/",
+                        dateTakenMs = originalDateMs
+                    )
+                    
+                    tempFile.delete()
                     
                     importedCount++
                 } catch (e: Exception) {
@@ -387,7 +442,12 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     /** Move the file into [targetRelativePath]. Falls back to a consent grant when required. */
     fun moveToAlbum(item: MediaItem, targetRelativePath: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            performWrite("Moved", "Move failed", op = { mediaRepo.tryMove(item.uri, targetRelativePath) })
+            performWrite(
+                okMsg = "Moved", 
+                failMsg = "Move failed", 
+                op = { mediaRepo.tryMove(item.uri, targetRelativePath) },
+                onSuccess = { mediaRepo.refreshItem(item.id) }
+            )
         }
     }
 
@@ -481,12 +541,14 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun verifyPin(pin: String): Boolean = settingsRepo.verifyPin(pin, settings.value)
 
     /** Editor overwrite path: hold the bitmap and request write consent. */
-    fun requestOverwrite(uri: Uri, bitmap: Bitmap) {
+    fun requestOverwrite(uri: Uri, bitmap: Bitmap, onDone: (() -> Unit)? = null) {
         pendingOverwriteBitmap = bitmap
+        pendingOverwriteCallback = onDone
         _pendingConsent.tryEmit(ConsentRequest.Overwrite(editorRepo.createOverwriteRequest(uri)))
         pendingOverwriteUri = uri
     }
     private var pendingOverwriteUri: Uri? = null
+    private var pendingOverwriteCallback: (() -> Unit)? = null
 
     /** Reported back by MainActivity after the system dialog resolves. */
     fun onConsentResult(request: ConsentRequest, approved: Boolean) {
@@ -513,16 +575,30 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
                 is ConsentRequest.Overwrite -> {
                     val uri = pendingOverwriteUri
                     val bmp = pendingOverwriteBitmap
+                    val cb = pendingOverwriteCallback
                     if (approved && uri != null && bmp != null) {
                         editorRepo.overwrite(uri, bmp)
                         uri.lastPathSegment?.toLongOrNull()?.let { id ->
                             container.thumbnailRepository.evict(id)
                         }
+                        container.mediaRepository.scan()
                         refreshTrigger++
+                        
+                        val modified = System.currentTimeMillis() / 1000
+                        val req = coil.request.ImageRequest.Builder(container.context)
+                            .data(uri)
+                            .setParameter("date_modified", modified)
+                            .memoryCacheKey("${uri}_${modified}_${refreshTrigger}")
+                            .diskCacheKey("${uri}_${modified}_${refreshTrigger}")
+                            .build()
+                        coil.Coil.imageLoader(container.context).execute(req)
+                        
                         showSnackbar.tryEmit("Saved")
                     }
                     pendingOverwriteBitmap = null
                     pendingOverwriteUri = null
+                    pendingOverwriteCallback = null
+                    cb?.invoke()
                 }
 
                 is ConsentRequest.Write -> {

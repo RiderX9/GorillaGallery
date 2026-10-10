@@ -1,0 +1,35 @@
+--- app/src/main/java/com/gorilla/gallery/data/repo/VideoEditorRepository.kt
++++ app/src/main/java/com/gorilla/gallery/data/repo/VideoEditorRepository.kt
+@@ -95,11 +95,28 @@
+                 override fun onCompleted(composition: androidx.media3.transformer.Composition, exportResult: androidx.media3.transformer.ExportResult) {
+                     try {
+                         val uri = if (overwrite) {
+-                            context.contentResolver.openOutputStream(item.uri, "wt")?.use { out ->
+-                                tmp.inputStream().use { input ->
+-                                    input.copyTo(out)
++                            var success = false
++                            try {
++                                context.contentResolver.openOutputStream(item.uri, "wt")?.use { out ->
++                                    tmp.inputStream().use { input ->
++                                        input.copyTo(out)
++                                    }
+                                 }
+-                            } ?: error("Cannot open ${item.uri} for overwrite")
++                                success = true
++                            } catch (e: Exception) {
++                                android.util.Log.e("VideoEditor", "openOutputStream failed: ${e.message}, falling back to raw file I/O")
++                            }
++                            
++                            if (!success) {
++                                var path: String? = null
++                                context.contentResolver.query(item.uri, arrayOf(android.provider.MediaStore.MediaColumns.DATA), null, null, null)?.use { cursor ->
++                                    if (cursor.moveToFirst()) {
++                                        path = cursor.getString(0)
++                                    }
++                                }
++                                if (path == null) error("Cannot resolve path for ${item.uri} to overwrite")
++                                tmp.copyTo(File(path!!), overwrite = true)
++                            }
+                             item.uri
+                         } else {
+                             val base = item.displayName.substringBeforeLast('.').ifBlank { "video" }

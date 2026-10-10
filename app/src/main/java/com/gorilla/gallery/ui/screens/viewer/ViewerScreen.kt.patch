@@ -1,0 +1,18 @@
+--- app/src/main/java/com/gorilla/gallery/ui/screens/viewer/ViewerScreen.kt
++++ app/src/main/java/com/gorilla/gallery/ui/screens/viewer/ViewerScreen.kt
+@@ -1071,6 +1071,15 @@
+                         modifier = bgModifier,
+                     )
+                 }
++                
++                // Screen-sized smooth preview (always visible during dismiss, hidden during zoom)
++                // Shares Coil memory cache with ZoomableAsyncImage so it decodes instantly with 0 lag.
++                coil.compose.AsyncImage(
++                    model = coilRequest,
++                    contentDescription = null,
++                    contentScale = if (dismissTransform.crop) ContentScale.Crop else ContentScale.Fit,
++                    modifier = bgModifier
++                )
+ 
+ 
+                     val doubleClickListener = androidx.compose.runtime.remember(containerSize, item.displayWidth, item.displayHeight) {

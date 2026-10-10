@@ -143,7 +143,7 @@ fun MediaGrid(
             ),
     ) {
         if (headerContent != null) {
-            item(span = { GridItemSpan(maxLineSpan) }, key = "top") { 
+            item(span = { GridItemSpan(maxLineSpan) }, key = "top", contentType = "top_header") { 
                 Box(modifier = Modifier.animateItem(placementSpec = placementSpec)) {
                     headerContent()
                 }
@@ -151,14 +151,23 @@ fun MediaGrid(
         }
         sections.forEach { section ->
             if (section.label.isNotEmpty()) {
-                item(span = { GridItemSpan(maxLineSpan) }, key = "h_${section.key}") {
+                item(span = { GridItemSpan(maxLineSpan) }, key = "h_${section.key}", contentType = "header") {
                     GlassDateHeaderPill(
                         label = section.label,
                         modifier = Modifier.animateItem(placementSpec = placementSpec)
                     )
                 }
             }
-            items(section.items, key = { it.id }) { item ->
+            items(section.items, key = { it.id }, contentType = { "media" }) { item ->
+                val hideByViewer = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+                androidx.compose.runtime.LaunchedEffect(viewerOpen, focusedItem?.id == item.id) {
+                    if (viewerOpen && focusedItem?.id == item.id) {
+                        kotlinx.coroutines.delay(150)
+                        hideByViewer.value = true
+                    } else {
+                        hideByViewer.value = false
+                    }
+                }
 
                 MediaCell(
                     item = item,
@@ -170,14 +179,23 @@ fun MediaGrid(
                     highQualityThumbnails = highQualityThumbnails,
                     modifier = Modifier
                         .animateItem(placementSpec = placementSpec)
-                        .alpha(if (viewerOpen && focusedItem?.id == item.id) 0f else 1f)
+                        .alpha(if (hideByViewer.value) 0f else 1f)
                         .padding(1.5.dp),
                 )
             }
         }
     }
 
-
+    val showScrollbar = com.gorilla.gallery.ui.theme.LocalAppSettings.current.showScrollbar
+    if (showScrollbar && sections.isNotEmpty()) {
+        FastScrollbar(
+            state = state,
+            sections = sections,
+            columns = columns,
+            contentPadding = contentPadding,
+            hasHeader = headerContent != null,
+        )
+    }
 }
 }
 

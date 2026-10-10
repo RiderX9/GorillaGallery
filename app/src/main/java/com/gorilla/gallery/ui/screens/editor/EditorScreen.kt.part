@@ -1,0 +1,332 @@
+private enum class DoodleSubTool { PEN, PENCIL, ERASER }
+
+@Composable
+private fun DoodleToolItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector?,
+    isActive: Boolean,
+    onClick: () -> Unit,
+    isEraserShape: Boolean = false
+) {
+    Box(
+        modifier = Modifier
+            .size(34.dp, 32.dp)
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+            .background(if (isActive) Color(0xFF34D399).copy(alpha = 0.16f) else Color.Transparent)
+            .then(if (isActive) Modifier.border(1.dp, Color(0xFF34D399).copy(alpha = 0.35f), androidx.compose.foundation.shape.RoundedCornerShape(12.dp)) else Modifier)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        if (isEraserShape) {
+            androidx.compose.foundation.Canvas(modifier = Modifier.size(15.dp)) {
+                val w = size.width
+                val h = size.height
+                rotate(45f) {
+                    val rectW = w * 0.45f
+                    val rectH = h * 0.8f
+                    val left = (w - rectW) / 2
+                    val top = (h - rectH) / 2
+                    val path = androidx.compose.ui.graphics.Path().apply {
+                        addRoundRect(
+                            androidx.compose.ui.geometry.RoundRect(
+                                left = left, top = top, right = left + rectW, bottom = top + rectH,
+                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.1f)
+                            )
+                        )
+                    }
+                    clipPath(path) {
+                        drawRect(
+                            color = if (isActive) Color(0xFF34D399) else Color.White.copy(alpha = 0.55f),
+                            topLeft = androidx.compose.ui.geometry.Offset(left, top + rectH * 0.45f),
+                            size = androidx.compose.ui.geometry.Size(rectW, rectH * 0.55f)
+                        )
+                    }
+                    drawPath(
+                        path = path,
+                        color = if (isActive) Color(0xFF34D399) else Color.White.copy(alpha = 0.55f),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = w * 0.08f)
+                    )
+                }
+            }
+        } else {
+            androidx.compose.material3.Icon(
+                imageVector = icon!!,
+                contentDescription = null,
+                tint = if (isActive) Color(0xFF34D399) else Color.White.copy(alpha = 0.55f),
+                modifier = Modifier.size(15.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun DoodleControls(
+    vm: EditorViewModel,
+    modifier: Modifier = Modifier
+) {
+    val activeColor = vm.currentColor.value
+    val strokeWidth = vm.currentStrokeWidth.value
+    var lastUsedColor by remember { mutableStateOf(if (activeColor != Color.Transparent && activeColor != Color.Unspecified) activeColor else Color(0xFF34D399)) }
+    var showColorPicker by remember { mutableStateOf(false) }
+    var showTextSettings by remember { mutableStateOf(false) }
+    
+    val isEraser = activeColor == Color.Transparent
+    var activeTool by remember { mutableStateOf(if (isEraser) DoodleSubTool.ERASER else DoodleSubTool.PEN) }
+
+    if (showColorPicker) {
+        com.gorilla.gallery.ui.components.ColorPickerDialog(
+            initialColor = lastUsedColor,
+            onColorSelected = { 
+                vm.currentColor.value = it
+                lastUsedColor = it
+            },
+            onDismissRequest = { showColorPicker = false }
+        )
+    }
+
+    if (showTextSettings) {
+        val ft = vm.floatingText.value
+        GlassCustomDialog(
+            onDismissRequest = { showTextSettings = false }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("Text Settings", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                
+                Text("Font Style", style = MaterialTheme.typography.labelMedium, color = DesignTokens.TextSecondary)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    val fonts = listOf(
+                        "Roboto" to CustomRobotoFamily,
+                        "Kalam" to CustomKalamFamily,
+                        "Zilla Slab" to CustomZillaSlabFamily
+                    )
+                    fonts.forEach { (name, family) ->
+                        val selected = ft?.fontFamily == family
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(40.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (selected) LocalDynamicColors.current.accent else Color.White.copy(alpha = 0.1f))
+                                .clickable {
+                                    ft?.let { vm.floatingText.value = it.copy(fontFamily = family) }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(name, color = if (selected) Color.Black else Color.White, style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+
+                Text("Font Weight", style = MaterialTheme.typography.labelMedium, color = DesignTokens.TextSecondary)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    val weights = listOf(
+                        "Thin" to FontWeight.Thin,
+                        "Normal" to FontWeight.Normal,
+                        "Bold" to FontWeight.Bold
+                    )
+                    weights.forEach { (name, weight) ->
+                        val selected = ft?.fontWeight == weight
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(40.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (selected) LocalDynamicColors.current.accent else Color.White.copy(alpha = 0.1f))
+                                .clickable {
+                                    ft?.let { vm.floatingText.value = it.copy(fontWeight = weight) }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(name, color = if (selected) Color.Black else Color.White, style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        // Top Row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                modifier = Modifier
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                    .background(Color.Black.copy(alpha = 0.35f))
+                    .border(1.dp, Color.White.copy(alpha = 0.06f), androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                    .padding(2.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                DoodleToolItem(
+                    icon = androidx.compose.material.icons.Icons.Rounded.Brush,
+                    isActive = activeTool == DoodleSubTool.PEN && !vm.isTextMode.value,
+                    onClick = { 
+                        activeTool = DoodleSubTool.PEN
+                        vm.isTextMode.value = false
+                        vm.currentColor.value = lastUsedColor 
+                    }
+                )
+                DoodleToolItem(
+                    icon = androidx.compose.material.icons.Icons.Rounded.Edit,
+                    isActive = activeTool == DoodleSubTool.PENCIL && !vm.isTextMode.value,
+                    onClick = { 
+                        activeTool = DoodleSubTool.PENCIL
+                        vm.isTextMode.value = false
+                        // For pencil we could apply some specific logic, for now just changing state
+                        vm.currentColor.value = lastUsedColor 
+                    }
+                )
+                DoodleToolItem(
+                    icon = null,
+                    isActive = activeTool == DoodleSubTool.ERASER && !vm.isTextMode.value,
+                    onClick = { 
+                        activeTool = DoodleSubTool.ERASER
+                        vm.isTextMode.value = false
+                        vm.currentColor.value = Color.Transparent 
+                    },
+                    isEraserShape = true
+                )
+            }
+
+            val isTextMode = vm.isTextMode.value
+            Row(
+                modifier = Modifier
+                    .height(32.dp)
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+                    .background(if (isTextMode) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.06f))
+                    .border(1.dp, if (isTextMode) Color.White.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.09f), androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+                    .clickable {
+                        if (isTextMode) {
+                            showTextSettings = true
+                        } else {
+                            vm.isTextMode.value = true
+                            if (vm.floatingText.value == null) {
+                                vm.floatingText.value = FloatingText(
+                                    text = "Add text here",
+                                    offset = vm.imageRenderedBounds.center,
+                                    color = lastUsedColor,
+                                    scale = 1f
+                                )
+                            }
+                        }
+                    }
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                androidx.compose.material3.Icon(
+                    imageVector = androidx.compose.material.icons.Icons.Rounded.TextFields,
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.85f),
+                    modifier = Modifier.size(13.dp)
+                )
+                Text(
+                    text = "Add Text",
+                    color = Color.White.copy(alpha = 0.85f),
+                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
+                )
+            }
+        }
+
+        // Bottom Row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                    .background(Color.Black.copy(alpha = 0.4f))
+                    .border(1.dp, Color.White.copy(alpha = 0.06f), androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                    .padding(start = 6.dp, end = 10.dp, top = 4.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(22.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(Color.White.copy(alpha = 0.06f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val nibSize = (strokeWidth / 64f * 18f).coerceIn(4f, 18f).dp
+                    Box(
+                        modifier = Modifier
+                            .size(nibSize)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(if (activeTool == DoodleSubTool.ERASER) Color.White else lastUsedColor)
+                            .then(if (activeTool == DoodleSubTool.ERASER) Modifier.border(1.dp, Color.Black.copy(alpha = 0.3f), androidx.compose.foundation.shape.CircleShape) else Modifier)
+                    )
+                }
+
+                GlassSlider(
+                    value = strokeWidth,
+                    onValueChange = { vm.currentStrokeWidth.value = it },
+                    valueRange = 4f..64f,
+                    modifier = Modifier.width(100.dp)
+                )
+            }
+            
+            Spacer(Modifier.width(12.dp))
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val swatches = listOf(
+                    Color(0xFF34D399),
+                    Color(0xFFFF3B30),
+                    Color(0xFFFFCC00),
+                    Color(0xFF007AFF)
+                )
+                swatches.forEach { color ->
+                    val isActive = lastUsedColor == color && activeTool != DoodleSubTool.ERASER && !vm.isTextMode.value
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .scale(if (isActive) 1.18f else 1f)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(color)
+                            .border(2.dp, if (isActive) Color.White else Color.Transparent, androidx.compose.foundation.shape.CircleShape)
+                            .clickable {
+                                lastUsedColor = color
+                                vm.currentColor.value = color
+                                if (activeTool == DoodleSubTool.ERASER) activeTool = DoodleSubTool.PEN
+                                vm.isTextMode.value = false
+                            }
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .size(20.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(androidx.compose.ui.graphics.Brush.sweepGradient(listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red)))
+                        .border(1.dp, Color.White.copy(alpha = 0.4f), androidx.compose.foundation.shape.CircleShape)
+                        .clickable { showColorPicker = true }
+                )
+            }
+        }
+    }
+}

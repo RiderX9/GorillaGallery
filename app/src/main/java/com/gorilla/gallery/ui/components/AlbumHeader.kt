@@ -322,82 +322,14 @@ fun AlbumHeader(
             }
 
         if (showSortDialog) {
-            com.gorilla.gallery.ui.components.AnimatedGlassDialog(
-                onDismissRequest = { showSortDialog = false }
-            ) { scale ->
-                        val configuration = androidx.compose.ui.platform.LocalConfiguration.current
-                        val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
-                        
-                        com.gorilla.gallery.ui.theme.LiquidGlassSurface(
-                            depth = com.gorilla.gallery.ui.theme.GlassDepth.MID, shape = RoundedCornerShape(28.dp),
-                            backdrop = backdrop ?: com.gorilla.gallery.ui.theme.LocalLiquidGlassContentBackdrop.current ?: com.gorilla.gallery.ui.theme.LocalLiquidGlassBackdrop.current,
-                            surfaceColor = appColors.bgSurface.copy(alpha = 0.92f),
-                            saturationOverride = 1.55f, tintAlphaOverride = 0.07f,
-                            modifier = Modifier.widthIn(min = 300.dp, max = if (isLandscape) 560.dp else 300.dp).scale(scale).clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null, onClick = {}),
-                        ) {
-                            Column(modifier = Modifier.padding(18.dp)) {
-                                Text(text = "Sort & Order Options", style = androidx.compose.material3.MaterialTheme.typography.titleMedium, color = com.gorilla.gallery.ui.theme.DesignTokens.TextPrimary, modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp))
-                                
-                                val haptic = com.gorilla.gallery.ui.theme.rememberHaptic()
-                                @Composable fun SortOption(label: String, selected: Boolean, onClick: () -> Unit) {
-                                    Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(if (selected) accentColor.copy(alpha=0.15f) else Color.Transparent).clickable { haptic(); onClick(); showSortDialog = false }.padding(horizontal = 10.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        Text(text = label, fontSize = 17.sp, color = if (selected) accentColor else appColors.textPrimary, modifier = Modifier.weight(1f))
-                                    }
-                                }
-                                @Composable fun OrderOption(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, selected: Boolean, onClick: () -> Unit) {
-                                    Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(if (selected) accentColor.copy(alpha=0.15f) else Color.Transparent).clickable { haptic(); onClick(); showSortDialog = false }.padding(horizontal = 10.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        Text(text = label, fontSize = 17.sp, color = if (selected) accentColor else appColors.textPrimary, modifier = Modifier.weight(1f))
-                                        androidx.compose.material3.Icon(imageVector = icon, contentDescription = label, tint = if (selected) accentColor else appColors.textPrimary, modifier = Modifier.size(20.dp))
-                                    }
-                                }
-
-                                if (isLandscape) {
-                                    Row(modifier = Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min)) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text("Sort By", color = com.gorilla.gallery.ui.theme.DesignTokens.TextSecondary, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
-                                            SortOption("Date Taken", sortMode == "Date Taken") { onSortModeChange?.invoke("Date Taken") }
-                                            SortOption("Date Modified", sortMode == "Date Modified") { onSortModeChange?.invoke("Date Modified") }
-                                            SortOption("Name (A-Z)", sortMode == "Name (A-Z)") { onSortModeChange?.invoke("Name (A-Z)") }
-                                            SortOption("File Size", sortMode == "File Size") { onSortModeChange?.invoke("File Size") }
-                                        }
-                                        Spacer(modifier = Modifier.width(16.dp))
-                                        Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                                            Text("Order", color = com.gorilla.gallery.ui.theme.DesignTokens.TextSecondary, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
-                                            OrderOption("Ascending", Icons.Rounded.ArrowUpward, sortAscending) { onSortAscendingChange?.invoke(true) }
-                                            OrderOption("Descending", Icons.Rounded.ArrowDownward, !sortAscending) { onSortAscendingChange?.invoke(false) }
-                                            
-                                            Spacer(modifier = Modifier.weight(1f))
-                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                                com.gorilla.gallery.ui.components.DialogPillButton(
-                                                    text = "Close",
-                                                    onClick = { showSortDialog = false }
-                                                )
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    Text("Sort By", color = com.gorilla.gallery.ui.theme.DesignTokens.TextSecondary, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
-                                    SortOption("Date Taken", sortMode == "Date Taken") { onSortModeChange?.invoke("Date Taken") }
-                                    SortOption("Date Modified", sortMode == "Date Modified") { onSortModeChange?.invoke("Date Modified") }
-                                    SortOption("Name (A-Z)", sortMode == "Name (A-Z)") { onSortModeChange?.invoke("Name (A-Z)") }
-                                    SortOption("File Size", sortMode == "File Size") { onSortModeChange?.invoke("File Size") }
-                                    
-                                    Spacer(modifier = Modifier.height(16.dp))
-                                    Text("Order", color = com.gorilla.gallery.ui.theme.DesignTokens.TextSecondary, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
-                                    OrderOption("Ascending", Icons.Rounded.ArrowUpward, sortAscending) { onSortAscendingChange?.invoke(true) }
-                                    OrderOption("Descending", Icons.Rounded.ArrowDownward, !sortAscending) { onSortAscendingChange?.invoke(false) }
-                                    
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                        com.gorilla.gallery.ui.components.DialogPillButton(
-                                            text = "Close",
-                                            onClick = { showSortDialog = false }
-                                        )
-                                    }
-                                }
-                            }
-                        }
-            }
+            com.gorilla.gallery.ui.components.SortAndOrderDialog(
+                sortMode = sortMode,
+                sortAscending = sortAscending,
+                onDismissRequest = { showSortDialog = false },
+                onSortModeChange = { mode -> onSortModeChange?.invoke(mode) },
+                onSortAscendingChange = { asc -> onSortAscendingChange?.invoke(asc) },
+                backdrop = backdrop
+            )
         }
         
 

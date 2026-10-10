@@ -36,11 +36,19 @@ class SearchViewModel(container: AppContainer) : ViewModel() {
     private val fullDate = DateTimeFormatter.ofPattern("MMM d yyyy", Locale.getDefault())
 
     private val _peopleCategories = MutableStateFlow<List<PersonCategory>>(emptyList())
+    private val _recentSearches = MutableStateFlow<List<String>>(emptyList())
+    val recentSearches: StateFlow<List<String>> = _recentSearches.asStateFlow()
+
     val peopleCategories: StateFlow<List<PersonCategory>> = _peopleCategories.asStateFlow()
 
 
 
     init {
+        val saved = prefs.getString("recent_searches", "") ?: "" 
+        if (saved.isNotEmpty()) { 
+            _recentSearches.value = saved.split("|||") 
+        } 
+
         viewModelScope.launch { refreshPeople() }
         viewModelScope.launch {
             peopleRepo.categoriesChanged.collect { refreshPeople() }
@@ -131,7 +139,33 @@ class SearchViewModel(container: AppContainer) : ViewModel() {
 
     fun setQuery(q: String) { _query.value = q }
 
+    fun addRecentSearch(query: String) {
+        val q = query.trim()
+        if (q.isEmpty()) return
+        val current = _recentSearches.value.toMutableList()
+        current.remove(q)
+        current.add(0, q)
+        if (current.size > 4) {
+            current.removeAt(current.size - 1)
+        }
+        _recentSearches.value = current
+        prefs.edit().putString("recent_searches", current.joinToString("|||")).apply()
+    }
+
+    fun removeRecentSearch(query: String) {
+        val current = _recentSearches.value.toMutableList()
+        current.remove(query)
+        _recentSearches.value = current
+        prefs.edit().putString("recent_searches", current.joinToString("|||")).apply()
+    }
+
+    fun clearRecentSearches() {
+        _recentSearches.value = emptyList()
+        prefs.edit().remove("recent_searches").apply()
+    }
+
     companion object {
         val Factory = viewModelFactory { container -> SearchViewModel(container) }
     }
 }
+

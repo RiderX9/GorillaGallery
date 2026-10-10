@@ -25,6 +25,10 @@ class ThumbnailRepository(private val context: Context) {
 
     private val _evictions = MutableSharedFlow<Long>(extraBufferCapacity = 10)
     val evictions: SharedFlow<Long> = _evictions.asSharedFlow()
+    private val prefs = context.getSharedPreferences("stale_thumbs", Context.MODE_PRIVATE)
+    val staleOsCacheIds = java.util.concurrent.ConcurrentHashMap.newKeySet<Long>().apply {
+        addAll(prefs.getStringSet("stale_ids", emptySet())?.mapNotNull { it.toLongOrNull() } ?: emptySet())
+    }
 
     fun evict(mediaId: Long) {
         val keys = cache.snapshot().keys.filter { it.startsWith("thumb_v7_${mediaId}_") }
@@ -33,6 +37,8 @@ class ThumbnailRepository(private val context: Context) {
         // Also wipe from disk
         diskCacheDir.listFiles { file -> file.name.startsWith("thumb_v7_${mediaId}_") }?.forEach { it.delete() }
         
+        staleOsCacheIds.add(mediaId)
+        prefs.edit().putStringSet("stale_ids", staleOsCacheIds.map { it.toString() }.toSet()).apply()
         _evictions.tryEmit(mediaId)
     }
 
@@ -43,44 +49,26 @@ class ThumbnailRepository(private val context: Context) {
     }
 
     fun getAnyCached(mediaId: Long, cacheVersion: Long = 0L, highQuality: Boolean = false): Bitmap? {
-        val prefix = "thumb_v7_${mediaId}_"
-        val suffixMatch = "_${cacheVersion}"
+        val prefix = "thumb_${mediaId}_"
+        val suffixMatch = "_${cacheVersion}_"
         
         val memFiles = cache.snapshot()
             .asSequence()
-            .filter { (key, _) -> key.startsWith(prefix) && key.endsWith(suffixMatch) }
+            .filter { (key, _) -> key.startsWith(prefix) && key.contains(suffixMatch) }
             
         val memMatch = if (highQuality) {
             memFiles.maxByOrNull {
                 val parts = it.key.split("_")
-                if (parts.size >= 5) parts[3].toIntOrNull() ?: 0 else 0
+                if (parts.size >= 5) parts[2].toIntOrNull() ?: 0 else 0
             }
         } else {
             memFiles.minByOrNull {
                 val parts = it.key.split("_")
-                if (parts.size >= 5) parts[3].toIntOrNull() ?: 0 else 0
+                if (parts.size >= 5) parts[2].toIntOrNull() ?: 0 else 0
             }
         }
         
-        if (memMatch != null) return memMatch.value
-            
-        return runCatching {
-            val diskFiles = diskCacheDir.listFiles { file ->
-                file.name.startsWith(prefix) && file.name.substringBeforeLast('.').endsWith(suffixMatch)
-            }
-            val diskMatch = if (highQuality) {
-                diskFiles?.maxByOrNull { file ->
-                    val parts = file.nameWithoutExtension.split("_")
-                    if (parts.size >= 5) parts[3].toIntOrNull() ?: 0 else 0
-                }
-            } else {
-                diskFiles?.minByOrNull { file ->
-                    val parts = file.nameWithoutExtension.split("_")
-                    if (parts.size >= 5) parts[3].toIntOrNull() ?: 0 else 0
-                }
-            }
-            diskMatch?.let { android.graphics.BitmapFactory.decodeFile(it.absolutePath) }
-        }.getOrNull()
+        return memMatch?.value
     }
 
     suspend fun load(uri: Uri, mediaId: Long, sizePx: Int, cacheVersion: Long = 0L, highQuality: Boolean = false): Bitmap? {
@@ -141,8 +129,12 @@ class ThumbnailRepository(private val context: Context) {
                     val osBmp = if (isVideo) {
                         decodeVideoFileThumbnail(uri, largeSize)
                     } else {
-                        runCatching { resolver.loadThumbnail(uri, android.util.Size(largeSize, largeSize), null) }
-                            .getOrElse { decodeFileThumbnail(uri, largeSize, false) }
+                        if (staleOsCacheIds.contains(mediaId)) {
+                            decodeFileThumbnail(uri, largeSize, false)
+                        } else {
+                            runCatching { resolver.loadThumbnail(uri, android.util.Size(largeSize, largeSize), null) }
+                                .getOrElse { decodeFileThumbnail(uri, largeSize, false) }
+                        }
                     }
                     
                     if (osBmp != null) {
@@ -155,8 +147,12 @@ class ThumbnailRepository(private val context: Context) {
                         } else osBmp
                     } else null
                 } else {
-                    runCatching { resolver.loadThumbnail(uri, android.util.Size(sizePx, sizePx), null) }
-                        .getOrElse { decodeFileThumbnail(uri, sizePx, false) ?: decodeVideoFileThumbnail(uri, sizePx) }
+                    if (staleOsCacheIds.contains(mediaId)) {
+                        decodeFileThumbnail(uri, sizePx, false) ?: decodeVideoFileThumbnail(uri, sizePx)
+                    } else {
+                        runCatching { resolver.loadThumbnail(uri, android.util.Size(sizePx, sizePx), null) }
+                            .getOrElse { decodeFileThumbnail(uri, sizePx, false) ?: decodeVideoFileThumbnail(uri, sizePx) }
+                    }
                 }
             }
             if (bitmap != null) {
@@ -265,7 +261,9 @@ class ThumbnailRepository(private val context: Context) {
     private fun decodeVideoFileThumbnail(uri: Uri, sizePx: Int): Bitmap? {
         return runCatching {
             MediaMetadataRetriever().use { retriever ->
-                retriever.setDataSource(context, uri)
+                context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                    retriever.setDataSource(pfd.fileDescriptor)
+                } ?: retriever.setDataSource(context, uri)
                 var frame: Bitmap? = null
                 
                 val widthStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)

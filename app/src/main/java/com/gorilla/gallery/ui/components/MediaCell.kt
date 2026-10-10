@@ -54,7 +54,7 @@ import com.gorilla.gallery.GalleryApp
 import com.gorilla.gallery.data.model.MediaItem
 import com.gorilla.gallery.ui.theme.pressScale
 
-private val CellShape = RoundedCornerShape(6.dp)
+private val CellShape = RoundedCornerShape(0.dp)
 
 /** A single timeline/album thumbnail: photo or video first-frame, with badges + selection. */
 @OptIn(ExperimentalFoundationApi::class)
@@ -77,12 +77,10 @@ fun MediaCell(
         animationSpec = spring(dampingRatio = 0.7f, stiffness = 380f),
         label = "cellScale",
     )
-    var thumbnail by remember(item.id, item.uri, thumbnailSizePx, highQualityThumbnails) { 
+    var thumbnail by remember(item.id, item.uri, thumbnailSizePx) { 
         mutableStateOf<Bitmap?>(
-            if (!highQualityThumbnails) {
-                app.container.thumbnailRepository.getCached(item.id, thumbnailSizePx, item.dateModifiedSec, highQualityThumbnails)
-                    ?: app.container.thumbnailRepository.getAnyCached(item.id, item.dateModifiedSec)
-            } else null
+            app.container.thumbnailRepository.getCached(item.id, thumbnailSizePx, item.dateModifiedSec, highQualityThumbnails)
+                ?: app.container.thumbnailRepository.getAnyCached(item.id, item.dateModifiedSec, highQualityThumbnails)
         ) 
     }
     var bounds by remember { mutableStateOf(Rect.Zero) }
@@ -141,12 +139,17 @@ fun MediaCell(
         } else {
             @OptIn(com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi::class)
             com.bumptech.glide.integration.compose.GlideImage(
-                model = item.uri,
+                model = item.absolutePath.takeIf { it.isNotEmpty() } ?: item.uri,
                 contentDescription = item.displayName,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize().scale(scale).clip(CellShape),
-            ) {
-                it.dontAnimate()
+            ) { request ->
+                val req = if (currentThumb != null) {
+                    request.placeholder(android.graphics.drawable.BitmapDrawable(context.resources, currentThumb))
+                } else {
+                    request
+                }
+                req.dontAnimate().signature(com.bumptech.glide.signature.ObjectKey("${item.dateModifiedSec}"))
             }
         }
 

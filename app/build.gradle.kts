@@ -15,8 +15,8 @@ android {
         applicationId = "com.gorilla.gallery"
         minSdk = 31
         targetSdk = 35
-        versionCode = 13
-        versionName = "1.12"
+        versionCode = 22
+        versionName = "1.21.1"
 
         vectorDrawables { useSupportLibrary = true }
     }
@@ -69,6 +69,7 @@ android {
 
 dependencies {
     implementation(libs.telephoto.zoomable)
+    implementation(libs.telephoto.zoomable.image.coil)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)

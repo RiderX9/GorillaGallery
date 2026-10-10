@@ -8,6 +8,12 @@ enum class FilterPreset(val label: String) {
     WARM("Warm"),
     FADED("Faded"),
     MONO("Mono"),
+    NOIR("Noir"),
+    SEPIA("Sepia"),
+    POLAROID("Polaroid"),
+    CINEMATIC("Cinema"),
+    WASHED("Washed"),
+    CYBERPUNK("Punk"),
 }
 
 /** Aspect-ratio presets for the crop tool. null = free. */

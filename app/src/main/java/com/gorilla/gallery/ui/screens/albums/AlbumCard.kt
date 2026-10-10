@@ -195,11 +195,10 @@ private fun AlbumMosaic(
 private fun PreviewTile(item: MediaItem, thumbnailSizePx: Int, highQualityThumbnails: Boolean = false, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val app = context.applicationContext as GalleryApp
-    var thumbnail by remember(item.id, item.uri, thumbnailSizePx, highQualityThumbnails) {
+    var thumbnail by remember(item.id, item.uri) {
         mutableStateOf<Bitmap?>(
-            if (!highQualityThumbnails) {
-                app.container.thumbnailRepository.getCached(item.id, thumbnailSizePx, item.dateModifiedSec, highQualityThumbnails)
-            } else null
+            app.container.thumbnailRepository.getCached(item.id, thumbnailSizePx, item.dateModifiedSec, false)
+                ?: app.container.thumbnailRepository.getAnyCached(item.id, item.dateModifiedSec)
         )
     }
 
@@ -230,8 +229,13 @@ private fun PreviewTile(item: MediaItem, thumbnailSizePx: Int, highQualityThumbn
                 contentDescription = item.displayName,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
-            ) {
-                it.dontAnimate()
+            ) { request ->
+                val req = if (thumbnail != null) {
+                    request.placeholder(android.graphics.drawable.BitmapDrawable(context.resources, thumbnail!!))
+                } else {
+                    request
+                }
+                req.dontAnimate()
             }
         }
         if (item.isVideo) {

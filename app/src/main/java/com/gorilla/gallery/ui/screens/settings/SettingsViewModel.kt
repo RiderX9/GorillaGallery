@@ -15,6 +15,30 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
 
     fun setThemeMode(v: ThemeMode) = viewModelScope.launch { repo.setThemeMode(v) }
     fun setAccent(v: AccentChoice) = viewModelScope.launch { repo.setAccent(v) }
+
+    fun setAppIcon(v: com.gorilla.gallery.data.settings.AppIconChoice) = viewModelScope.launch {
+        repo.setAppIcon(v)
+        
+        val pm = container.context.packageManager
+        com.gorilla.gallery.data.settings.AppIconChoice.entries.forEach { choice ->
+            val componentName = android.content.ComponentName(container.context, choice.aliasName)
+            val state = if (choice == v) {
+                android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+            } else {
+                android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+            }
+            try {
+                pm.setComponentEnabledSetting(
+                    componentName,
+                    state,
+                    android.content.pm.PackageManager.DONT_KILL_APP
+                )
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
     fun setBlurIntensity(v: com.gorilla.gallery.ui.theme.BlurIntensity) = viewModelScope.launch { repo.setBlurIntensity(v) }
     fun setLiquidGlassIntensity(v: com.gorilla.gallery.ui.theme.BlurIntensity) = viewModelScope.launch { repo.setLiquidGlassIntensity(v) }
     fun setSurfaceOpacity(v: Float) = viewModelScope.launch { repo.setSurfaceOpacity(v) }
@@ -26,6 +50,7 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     fun setSkipConfirmationsAndToasts(v: Boolean) = viewModelScope.launch { repo.setSkipConfirmationsAndToasts(v) }
     fun setEnablePipMode(v: Boolean) = viewModelScope.launch { repo.setEnablePipMode(v) }
     fun setMoveToTrashByDefaultForDelete(v: Boolean) = viewModelScope.launch { repo.setMoveToTrashByDefaultForDelete(v) }
+    fun setShowScrollbar(v: Boolean) = viewModelScope.launch { repo.setShowScrollbar(v) }
 
     fun setSecureEnabled(v: Boolean) = viewModelScope.launch { repo.setSecureFolderEnabled(v) }
     fun setBiometricUnlock(v: Boolean) = viewModelScope.launch { repo.setBiometricUnlock(v) }

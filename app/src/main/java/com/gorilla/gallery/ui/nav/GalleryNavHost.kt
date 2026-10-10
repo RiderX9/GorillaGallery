@@ -196,7 +196,9 @@ fun GalleryNavHost(
                 onOpenVideos = { navController.navigate(Routes.Videos) },
                 onOpenFavorites = { navController.navigate(Routes.Favorites) { launchSingleTop = true } },
                 onOpenRaw = { navController.navigate(Routes.Raw) },
-                onOpenPanoramas = { navController.navigate(Routes.Panoramas) },
+                onOpenDocuments = { navController.navigate(Routes.Documents) },
+                onOpenNature = { navController.navigate(Routes.Nature) },
+                onOpenPets = { navController.navigate(Routes.Pets) },
                 onOpenPersonDetail = { clusterId -> navController.navigate("${Routes.PersonDetail}/$clusterId") },
                 onOpenSeeAllPeople = { navController.navigate("${Routes.PersonDetail}/-2") },
             )
@@ -282,21 +284,120 @@ fun GalleryNavHost(
                 contentPadding = contentPadding,
                 onBack = { navController.popBackStack() },
                 onOpenViewer = onOpenViewer,
-                predicate = { !it.isVideo && it.mimeType.contains("raw", ignoreCase = true) },
+                predicate = { !it.isVideo && (it.mimeType.contains("raw", ignoreCase = true) || it.mimeType.contains("dng", ignoreCase = true)) },
             )
         }
-        composable(Routes.Panoramas) {
+        composable(Routes.Nature) {
+            var allowedUris by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Set<String>>(emptySet()) }
+            var isLoaded by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+            androidx.compose.runtime.LaunchedEffect(Unit) {
+                allowedUris = app.container.imageLabelRepository.searchImagePaths("nature") + app.container.imageLabelRepository.searchImagePaths("plant") + app.container.imageLabelRepository.searchImagePaths("flower") + app.container.imageLabelRepository.searchImagePaths("forest")
+                isLoaded = true
+            }
+            val currentUris = allowedUris
+            val currentLoaded = isLoaded
+            val predicate = androidx.compose.runtime.remember(currentUris, currentLoaded) {
+                { it: com.gorilla.gallery.data.model.MediaItem -> currentLoaded && it.uri.toString() in currentUris }
+            }
             MediaTypeScreen(
                 app = app,
                 viewerOpen = viewerOpen,
-                title = "Panoramas",
+                title = "Nature",
                 contentPadding = contentPadding,
                 onBack = { navController.popBackStack() },
                 onOpenViewer = onOpenViewer,
-                predicate = { 
-                    !it.isVideo && it.width > 0 && it.height > 0 && 
-                    (it.width.toFloat() / it.height.toFloat() > 2.5f || it.height.toFloat() / it.width.toFloat() > 2.5f)
-                },
+                predicate = predicate
+            )
+        }
+        composable(Routes.Pets) {
+            var allowedUris by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Set<String>>(emptySet()) }
+            var isLoaded by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+            androidx.compose.runtime.LaunchedEffect(Unit) {
+                allowedUris = app.container.imageLabelRepository.searchImagePaths("pet") + app.container.imageLabelRepository.searchImagePaths("dog") + app.container.imageLabelRepository.searchImagePaths("cat") + app.container.imageLabelRepository.searchImagePaths("animal")
+                isLoaded = true
+            }
+            val currentUris = allowedUris
+            val currentLoaded = isLoaded
+            val predicate = androidx.compose.runtime.remember(currentUris, currentLoaded) {
+                { it: com.gorilla.gallery.data.model.MediaItem -> currentLoaded && it.uri.toString() in currentUris }
+            }
+            MediaTypeScreen(
+                app = app,
+                viewerOpen = viewerOpen,
+                title = "Pets",
+                contentPadding = contentPadding,
+                onBack = { navController.popBackStack() },
+                onOpenViewer = onOpenViewer,
+                predicate = predicate
+            )
+        }
+
+        composable(Routes.Documents) {
+            var allowedUris by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Set<String>>(emptySet()) }
+            var isLoaded by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+            androidx.compose.runtime.LaunchedEffect(Unit) {
+                val baseUris = app.container.imageLabelRepository.searchImagePaths("document") + 
+                               app.container.imageLabelRepository.searchImagePaths("receipt") + 
+                               app.container.imageLabelRepository.searchImagePaths("paper") + 
+                               app.container.imageLabelRepository.searchImagePaths("handwriting") +
+                               app.container.imageLabelRepository.searchImagePaths("invoice") +
+                               app.container.imageLabelRepository.searchImagePaths("form") +
+                               app.container.imageLabelRepository.searchImagePaths("passport") +
+                               app.container.imageLabelRepository.searchImagePaths("identity document") +
+                               app.container.imageLabelRepository.searchImagePaths("id card") +
+                               app.container.imageLabelRepository.searchImagePaths("license") +
+                               app.container.textIndexRepository.getPathsWithMinimumTextLength(50)
+                               
+                val excludedUris = app.container.imageLabelRepository.searchImagePaths("electronics") +
+                                   app.container.imageLabelRepository.searchImagePaths("screen") +
+                                   app.container.imageLabelRepository.searchImagePaths("display") +
+                                   app.container.imageLabelRepository.searchImagePaths("tv") +
+                                   app.container.imageLabelRepository.searchImagePaths("television") +
+                                   app.container.imageLabelRepository.searchImagePaths("monitor") +
+                                   app.container.imageLabelRepository.searchImagePaths("computer") +
+                                   app.container.imageLabelRepository.searchImagePaths("laptop") +
+                                   app.container.imageLabelRepository.searchImagePaths("mobile phone") +
+                                   app.container.imageLabelRepository.searchImagePaths("smartphone") +
+                                   app.container.imageLabelRepository.searchImagePaths("nature") +
+                                   app.container.imageLabelRepository.searchImagePaths("plant") +
+                                   app.container.imageLabelRepository.searchImagePaths("flower") +
+                                   app.container.imageLabelRepository.searchImagePaths("tree") +
+                                   app.container.imageLabelRepository.searchImagePaths("landscape") +
+                                   app.container.imageLabelRepository.searchImagePaths("outdoor") +
+                                   app.container.imageLabelRepository.searchImagePaths("mountain") +
+                                   app.container.imageLabelRepository.searchImagePaths("water") +
+                                   app.container.imageLabelRepository.searchImagePaths("ocean") +
+                                   app.container.imageLabelRepository.searchImagePaths("beach") +
+                                   app.container.imageLabelRepository.searchImagePaths("sky") +
+                                   app.container.imageLabelRepository.searchImagePaths("forest") +
+                                   app.container.imageLabelRepository.searchImagePaths("grass") +
+                                   app.container.imageLabelRepository.searchImagePaths("petal") +
+                                   app.container.imageLabelRepository.searchImagePaths("leaf") +
+                                   app.container.imageLabelRepository.searchImagePaths("pet") +
+                                   app.container.imageLabelRepository.searchImagePaths("dog") +
+                                   app.container.imageLabelRepository.searchImagePaths("cat") +
+                                   app.container.imageLabelRepository.searchImagePaths("animal") +
+                                   app.container.imageLabelRepository.searchImagePaths("food") +
+                                   app.container.imageLabelRepository.searchImagePaths("drink") +
+                                   app.container.imageLabelRepository.searchImagePaths("vehicle") +
+                                   app.container.imageLabelRepository.searchImagePaths("car")
+                                   
+                allowedUris = baseUris - excludedUris
+                isLoaded = true
+            }
+            val currentUris = allowedUris
+            val currentLoaded = isLoaded
+            val predicate = androidx.compose.runtime.remember(currentUris, currentLoaded) {
+                { it: com.gorilla.gallery.data.model.MediaItem -> currentLoaded && !it.isScreenshot && it.uri.toString() in currentUris }
+            }
+            MediaTypeScreen(
+                app = app,
+                viewerOpen = viewerOpen,
+                title = "Documents",
+                contentPadding = contentPadding,
+                onBack = { navController.popBackStack() },
+                onOpenViewer = onOpenViewer,
+                predicate = predicate
             )
         }
         composable(
@@ -492,6 +593,14 @@ fun GalleryNavHost(
                 ) {
                     SelectionActionBar(
                         count = selected.size,
+                        allSelected = finalFilteredItems.isNotEmpty() && selected.size == finalFilteredItems.size,
+                        onSelectAll = {
+                            if (selected.size == finalFilteredItems.size) {
+                                clear()
+                            } else {
+                                selected = finalFilteredItems.map { it.id }.toSet()
+                            }
+                        },
                         onFavorite = { selectedItems.forEach { app.toggleFavorite(it) }; clear() },
                         onShare = { shareItems(context, selectedItems) },
                         onSecure = { app.moveToSecure(selectedItems); clear() },
@@ -579,9 +688,11 @@ private fun tabEnterTransition(initialRoute: String?, targetRoute: String?): Ent
 
     return if (initialIndex != null && targetIndex != null && initialIndex != targetIndex) {
         val forward = targetIndex > initialIndex
-        slideInHorizontally(animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing)) { width ->
-            if (forward) width / 5 else -width / 5
-        } + fadeIn(animationSpec = tween(durationMillis = 120, easing = FastOutSlowInEasing))
+        if (forward) {
+            slideInHorizontally(animationSpec = tween(320, easing = FastOutSlowInEasing)) { it } + fadeIn(animationSpec = tween(320))
+        } else {
+            slideInHorizontally(animationSpec = tween(320, easing = FastOutSlowInEasing)) { -it / 3 } + fadeIn(animationSpec = tween(320))
+        }
     } else {
         fadeIn(animationSpec = tween(durationMillis = 120, easing = FastOutSlowInEasing))
     }
@@ -605,16 +716,18 @@ private fun tabExitTransition(initialRoute: String?, targetRoute: String?): Exit
 
     return if (initialIndex != null && targetIndex != null && initialIndex != targetIndex) {
         val forward = targetIndex > initialIndex
-        slideOutHorizontally(animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing)) { width ->
-            if (forward) -width / 5 else width / 5
-        } + fadeOut(animationSpec = tween(durationMillis = 90, easing = FastOutSlowInEasing))
+        if (forward) {
+            slideOutHorizontally(animationSpec = tween(260)) { -it / 3 } + fadeOut(animationSpec = tween(260))
+        } else {
+            slideOutHorizontally(animationSpec = tween(260)) { it } + fadeOut(animationSpec = tween(260))
+        }
     } else {
         fadeOut(animationSpec = tween(durationMillis = 120, easing = FastOutSlowInEasing))
     }
 }
 
 private fun bottomTabIndex(route: String?): Int? {
-    val orderedTabs = listOf(Destination.Timeline, Destination.Albums, Destination.Search, Destination.Settings)
+    val orderedTabs = listOf(Destination.Timeline, Destination.Albums, Destination.Settings, Destination.Search)
     return orderedTabs.indexOfFirst { destination -> route?.startsWith(destination.route) == true }
         .takeIf { it >= 0 }
 }

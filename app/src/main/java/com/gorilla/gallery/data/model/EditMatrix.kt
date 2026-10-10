@@ -20,6 +20,58 @@ object EditMatrix {
             postConcat(contrast(-0.2f)); postConcat(brightness(0.08f)); postConcat(saturation(0.85f))
         }
         FilterPreset.MONO -> saturation(0f)
+        FilterPreset.NOIR -> ColorMatrix().apply {
+            postConcat(saturation(0f))
+            postConcat(contrast(0.4f))
+            postConcat(shadows(-0.3f))
+        }
+        FilterPreset.SEPIA -> ColorMatrix().apply {
+            postConcat(ColorMatrix(floatArrayOf(
+                0.393f, 0.769f, 0.189f, 0f, 0f,
+                0.349f, 0.686f, 0.168f, 0f, 0f,
+                0.272f, 0.534f, 0.131f, 0f, 0f,
+                0f, 0f, 0f, 1f, 0f
+            )))
+            postConcat(contrast(0.1f))
+        }
+        FilterPreset.POLAROID -> ColorMatrix().apply {
+            postConcat(contrast(-0.1f))
+            postConcat(shadows(0.2f))
+            postConcat(warmth(0.2f))
+            postConcat(ColorMatrix(floatArrayOf(
+                1f, 0f, 0f, 0f, 15f,
+                0f, 1f, 0f, 0f, 0f,
+                0f, 0f, 1f, 0f, 10f,
+                0f, 0f, 0f, 1f, 0f
+            )))
+            postConcat(saturation(0.8f))
+        }
+        FilterPreset.CINEMATIC -> ColorMatrix().apply {
+            postConcat(contrast(0.2f))
+            postConcat(saturation(1.1f))
+            postConcat(ColorMatrix(floatArrayOf(
+                1.1f, 0f, 0f, 0f, 5f,
+                0f, 1.0f, 0f, 0f, 0f,
+                0f, 0f, 1.2f, 0f, -10f,
+                0f, 0f, 0f, 1f, 0f
+            )))
+        }
+        FilterPreset.WASHED -> ColorMatrix().apply {
+            postConcat(contrast(-0.4f))
+            postConcat(brightness(0.1f))
+            postConcat(saturation(0.6f))
+            postConcat(shadows(0.3f))
+        }
+        FilterPreset.CYBERPUNK -> ColorMatrix().apply {
+            postConcat(contrast(0.3f))
+            postConcat(saturation(1.3f))
+            postConcat(ColorMatrix(floatArrayOf(
+                1.2f, 0f, 0f, 0f, 0f,
+                0f, 0.8f, 0f, 0f, 0f,
+                0f, 0f, 1.3f, 0f, 0f,
+                0f, 0f, 0f, 1f, 0f
+            )))
+        }
     }
 
     fun combined(edit: EditState): ColorMatrix = ColorMatrix().apply {

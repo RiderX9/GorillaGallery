@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -129,11 +130,6 @@ fun GalleryRoot(
         viewerRequest = viewerRequest?.withFreshItems()
         activeViewerRequest = activeViewerRequest?.withFreshItems()
     }
-    LaunchedEffect(viewerRequest?.items, viewerRequest?.currentUri) {
-        val req = viewerRequest ?: return@LaunchedEffect
-        val currentItem = req.items.firstOrNull { it.uri == req.currentUri } ?: return@LaunchedEffect
-        app.onPhotoFocused(currentItem)
-    }
     // Opaque backdrop mounted only WHILE the viewer is open, so the enter animation doesn't reveal
     // the grid through the fading-in viewer. It's torn down the instant the viewer closes so the
     // grid is shown right away — holding it past the close was what caused the ~0.5s black screen.
@@ -147,24 +143,33 @@ fun GalleryRoot(
     // at 0 and are handled by the AnimatedVisibility exit fading over the grid.
     var viewerDismissProgress by remember { mutableFloatStateOf(0f) }
     var viewerDismissing by remember { mutableStateOf(false) }
+    var viewerReturningFromEditor by remember { mutableStateOf(false) }
     var secureOpen by remember { mutableStateOf(false) }
     var trashOpen by remember { mutableStateOf(false) }
     var holdReturnBackdrop by remember { mutableStateOf(false) }
     var editorOpeningBackdrop by remember { mutableStateOf(false) }
+    var viewerOpening by remember { mutableStateOf(false) }
     val viewerOpen = viewerRequest != null && !isEditorOpen
 
     fun openViewer(items: List<MediaItem>, uri: android.net.Uri, sourceBounds: Rect? = null, onCloseReturn: (() -> Unit)? = null) {
+        viewerReturningFromEditor = false
         nextViewerOpenId += 1
         val req = ViewerRequest(nextViewerOpenId, items, uri, sourceBounds = sourceBounds, onCloseReturn = onCloseReturn)
+        
+        // Update focused item synchronously before the grid recomposes with viewerOpen=true,
+        // otherwise the stale focusedItem causes the previously opened grid cell to briefly flash invisible.
+        items.firstOrNull { it.uri == uri }?.let { app.onPhotoFocused(it) }
+
         // Set the rendered request synchronously (not deferred via the LaunchedEffect below) so the
         // viewer's opaque content covers the grid on the very first frame. Otherwise the overlay
         // renders empty for one frame and the grid flashes through during the enter animation.
         activeViewerRequest = req
         viewerRequest = req
         viewerReturnAction = onCloseReturn
-        viewerDismissProgress = 0f
+        viewerDismissProgress = if (sourceBounds != null) 1f else 0f
         viewerDismissing = false
         viewerSwipeClosing = false
+        viewerOpening = true
     }
     val onOpenViewer: (List<MediaItem>, android.net.Uri, Rect?) -> Unit = { items, uri, sourceBounds ->
         openViewer(items, uri, sourceBounds)
@@ -202,7 +207,17 @@ fun GalleryRoot(
     GalleryBackgroundHost {
         Box(Modifier.fillMaxSize().background(com.gorilla.gallery.ui.theme.DesignTokens.BgBase)) {
             if (!granted) {
-                PermissionGate(onRequest = { permissionState.launchMultiplePermissionRequest() })
+                val context = androidx.compose.ui.platform.LocalContext.current
+                PermissionGate(onRequest = { 
+                    permissionState.launchMultiplePermissionRequest()
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R && !android.os.Environment.isExternalStorageManager()) {
+                        try {
+                            context.startActivity(android.content.Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, android.net.Uri.parse("package:${context.packageName}")))
+                        } catch (e: Exception) {
+                            context.startActivity(android.content.Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                        }
+                    }
+                })
             } else {
                 MainShell(
                     app = app,
@@ -210,7 +225,7 @@ fun GalleryRoot(
                     viewerOpen = viewerOpen,
                     onOpenViewer = onOpenViewer,
                     editorFallbackItem = editorFallbackItem,
-                    onEditorClosed = { editorFallbackItem = null },
+                    onEditorClosed = { editorFallbackItem = null; viewerReturningFromEditor = true },
                 )
             }
 
@@ -221,6 +236,8 @@ fun GalleryRoot(
             if (showViewerBackdrop) {
                 val backdropAlpha = if (holdReturnBackdrop) {
                     1f
+                } else if (viewerOpening) {
+                    ((1f - viewerDismissProgress) / 0.28f).coerceIn(0f, 1f)
                 } else {
                     (1f - (viewerDismissProgress / 0.28f)).coerceIn(0f, 1f)
                 }
@@ -244,13 +261,17 @@ fun GalleryRoot(
             // painted (same cached photo), so there's no gap and the grid never shows. Normal close
             // fades over the BgBase backdrop above instead.
             AnimatedVisibility(
-                visible = viewerRequest != null && !isEditorOpen,
-                enter = fadeIn(tween(durationMillis = 150, easing = FastOutSlowInEasing)) + scaleIn(initialScale = 0.92f, animationSpec = tween(durationMillis = 150, easing = FastOutSlowInEasing)),
-                exit = if (viewerSwipeClosing) {
-                    fadeOut(tween(durationMillis = 80, easing = FastOutLinearInEasing))
+                visible = viewerRequest != null,
+                enter = if (viewerRequest?.sourceBounds != null) {
+                    androidx.compose.animation.EnterTransition.None
                 } else {
-                    fadeOut(tween(durationMillis = 150, easing = FastOutSlowInEasing)) +
-                        scaleOut(targetScale = 0.94f, animationSpec = tween(durationMillis = 150, easing = FastOutSlowInEasing))
+                    fadeIn(tween(durationMillis = 250, easing = FastOutSlowInEasing))
+                },
+                exit = if (viewerSwipeClosing) {
+                    fadeOut(tween(durationMillis = 0, easing = FastOutLinearInEasing))
+                } else {
+                    fadeOut(tween(durationMillis = 250, easing = FastOutSlowInEasing)) +
+                        scaleOut(targetScale = 0.94f, animationSpec = tween(durationMillis = 250, easing = FastOutSlowInEasing))
                 }
             ) {
                 activeViewerRequest?.let { req ->
@@ -273,6 +294,27 @@ fun GalleryRoot(
                                 }
                             }
                         }
+                        var hideViewerForEditor by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+                        androidx.compose.runtime.LaunchedEffect(isEditorOpen) {
+                            if (isEditorOpen) {
+                                kotlinx.coroutines.delay(120)
+                                hideViewerForEditor = true
+                            } else {
+                                hideViewerForEditor = false
+                            }
+                        }
+                        val animatedViewerAlpha by androidx.compose.animation.core.animateFloatAsState(
+                            targetValue = if (hideViewerForEditor) 0f else 1f,
+                            animationSpec = androidx.compose.animation.core.tween(durationMillis = if (hideViewerForEditor) 150 else 0)
+                        )
+                        val viewerAlpha = if (!isEditorOpen) 1f else animatedViewerAlpha
+                        val isFullyInvisible = viewerAlpha == 0f && isEditorOpen
+                        androidx.compose.foundation.layout.Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .alpha(viewerAlpha)
+                                .offset(x = if (isFullyInvisible) 10000.dp else 0.dp)
+                        ) {
                         ViewerScreen(
                             app = app,
                             initialItems = req.items,
@@ -324,10 +366,13 @@ fun GalleryRoot(
                             onDismissProgress = { progress ->
                                 viewerDismissProgress = progress
                                 viewerDismissing = progress > 0.01f
+                                if (progress <= 0.001f) viewerOpening = false
                             },
                             dismissRequested = viewerDismissing,
-                            highQualityThumbnails = settings.highQualityThumbnails
+                            highQualityThumbnails = settings.highQualityThumbnails,
+                            skipEnterAnimation = viewerReturningFromEditor,
                         )
+                        }
                     }
                 }
             }
@@ -446,6 +491,19 @@ private fun MainShell(
                                                 restoreState = true
                                             }
                                         }
+                                    } else {
+                                        if (dest == Destination.Albums) {
+                                            navController.popBackStack(Destination.Albums.route, inclusive = false)
+                                        } else if (dest == Destination.Search) {
+                                            val topRoute = navController.currentDestination?.route
+                                            if (topRoute?.startsWith(Destination.Search.route) != true) {
+                                                navController.popBackStack(Destination.Search.route, inclusive = true)
+                                                navController.navigate("${Destination.Search.route}?autoFocus=false") {
+                                                    launchSingleTop = true
+                                                    restoreState = true
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             )
@@ -497,6 +555,10 @@ private fun MainShell(
                                                 restoreState = true
                                             }
                                         }
+                                    } else {
+                                        if (dest == Destination.Albums) {
+                                            navController.popBackStack(Destination.Albums.route, inclusive = false)
+                                        }
                                     }
                                 }
                             )
@@ -521,6 +583,15 @@ private fun MainShell(
                                         }
                                         navController.navigate("${Destination.Search.route}?autoFocus=true") {
                                             launchSingleTop = true
+                                        }
+                                    } else {
+                                        val topRoute = navController.currentDestination?.route
+                                        if (topRoute?.startsWith(Destination.Search.route) != true) {
+                                            navController.popBackStack(Destination.Search.route, inclusive = true)
+                                            navController.navigate("${Destination.Search.route}?autoFocus=false") {
+                                                launchSingleTop = true
+                                                restoreState = true
+                                            }
                                         }
                                     }
                                 }

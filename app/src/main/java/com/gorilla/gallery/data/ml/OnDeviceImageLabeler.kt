@@ -50,7 +50,7 @@ class OnDeviceImageLabeler(
     companion object {
         private const val MIN_LABEL_BITMAP_SIZE = 32
         private const val MAX_LABEL_BITMAP_SIZE = 224
-        private const val MIN_CONFIDENCE = 0.90f
+        private const val MIN_CONFIDENCE = 0.80f
     }
 }
 

@@ -17,4 +17,8 @@ class TextIndexRepository(database: AppDatabase) {
     suspend fun getText(imagePath: String): String = dao.getText(imagePath)
 
     suspend fun searchImagePaths(query: String): Set<String> = dao.searchByText(query)
+
+    suspend fun getIndexedPaths(): Set<String> = dao.indexedImagePaths()
+
+    suspend fun getPathsWithMinimumTextLength(minLength: Int): Set<String> = dao.getPathsWithMinimumTextLength(minLength)
 }

@@ -30,7 +30,7 @@ enum class Destination(
             // All non-top-level routes (like "album/123", "photos", etc.) belong to the Albums tab
             val isAlbumsSubroute = route.startsWith("album") || route in setOf(
                 "photos", "videos", "selfies", "screenshots", "edited", 
-                "favorites", "secure", "raw", "panoramas", "trash"
+                "favorites", "secure", "raw", "documents", "trash", "nature", "pets"
             )
             return if (isAlbumsSubroute) Albums else Timeline
         }
@@ -49,7 +49,9 @@ object Routes {
     const val SecureFolder = "secure"
     const val Trash = "trash"
     const val Raw = "raw"
-    const val Panoramas = "panoramas"
+    const val Documents = "documents"
+    const val Nature = "nature"
+    const val Pets = "pets"
     const val PersonDetail = "personDetail"
     fun albumDetail(bucketId: Long) = "album/$bucketId"
 }

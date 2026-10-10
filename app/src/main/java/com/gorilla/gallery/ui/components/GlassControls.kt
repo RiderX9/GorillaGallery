@@ -380,10 +380,11 @@ fun GlassSlider(
                     .background(Color.White.copy(alpha = 0.72f)),
             )
         }
-        val thumbX = with(density) { (fraction * widthPx).toDp() } - 9.dp
+        val maxThumbX = (with(density) { widthPx.toDp() } - 18.dp).coerceAtLeast(0.dp)
+        val thumbX = (with(density) { (fraction * widthPx).toDp() } - 9.dp).coerceIn(0.dp, maxThumbX)
         Box(
             Modifier
-                .offset(x = thumbX.coerceAtLeast(0.dp))
+                .offset(x = thumbX)
                 .size(18.dp)
                 .clip(CircleShape)
                 .background(Color.White),

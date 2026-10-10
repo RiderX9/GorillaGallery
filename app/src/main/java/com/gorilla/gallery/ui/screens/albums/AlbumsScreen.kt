@@ -145,7 +145,7 @@ fun AlbumsScreen(
             modifier = Modifier.fillMaxSize(),
         ) {
 
-            item(span = { GridItemSpan(maxLineSpan) }, key = "myAlbumsHeader") {
+            item(span = { GridItemSpan(maxLineSpan) }, key = "myAlbumsHeader", contentType = "header") {
                 SectionHeader(
                     title = "My Albums",
                     action = if (hasHiddenAlbums) {
@@ -158,7 +158,7 @@ fun AlbumsScreen(
             }
 
             if (!isLoading) {
-                items(visibleAlbums, key = { it.bucketId }) { album ->
+                items(visibleAlbums, key = { it.bucketId }, contentType = { "album" }) { album ->
                     AlbumCard(
                         album = album,
                         thumbnailSizePx = albumPreviewSizePx,
@@ -170,13 +170,13 @@ fun AlbumsScreen(
                 }
             }
 
-            item(span = { GridItemSpan(maxLineSpan) }, key = "mediaTypesHeader") {
+            item(span = { GridItemSpan(maxLineSpan) }, key = "mediaTypesHeader", contentType = "header") {
                 SectionHeader(
                     title = "Media Types",
                     modifier = Modifier.animateItem(placementSpec = SpringSpecs.OffsetSpring),
                 )
             }
-            item(span = { GridItemSpan(maxLineSpan) }, key = "mediaTypes") {
+            item(span = { GridItemSpan(maxLineSpan) }, key = "mediaTypes", contentType = "section") {
                 AlbumsListSection(modifier = Modifier.animateItem(placementSpec = SpringSpecs.OffsetSpring)) {
                     AlbumListRow(
                         icon = Icons.Rounded.Photo,
@@ -220,13 +220,13 @@ fun AlbumsScreen(
                 }
             }
 
-            item(span = { GridItemSpan(maxLineSpan) }, key = "utilitiesHeader") {
+            item(span = { GridItemSpan(maxLineSpan) }, key = "utilitiesHeader", contentType = "header") {
                 SectionHeader(
                     title = "Utilities",
                     modifier = Modifier.animateItem(placementSpec = SpringSpecs.OffsetSpring),
                 )
             }
-            item(span = { GridItemSpan(maxLineSpan) }, key = "utilities") {
+            item(span = { GridItemSpan(maxLineSpan) }, key = "utilities", contentType = "section") {
                 AlbumsListSection(modifier = Modifier.animateItem(placementSpec = SpringSpecs.OffsetSpring)) {
                     AlbumListRow(
                         icon = Icons.Rounded.Edit,

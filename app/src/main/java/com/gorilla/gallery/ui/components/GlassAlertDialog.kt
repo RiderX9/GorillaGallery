@@ -131,6 +131,7 @@ fun GlassAlertDialog(
     dismissLabel: String? = null,
     onDismiss: (() -> Unit)? = null,
     icon: ImageVector? = null,
+    surfaceAlpha: Float = 0.92f,
 ) {
     val accent = LocalDynamicColors.current.accent
     val currentBackdrop = com.gorilla.gallery.ui.theme.LocalLiquidGlassContentBackdrop.current ?: com.gorilla.gallery.ui.theme.LocalLiquidGlassBackdrop.current
@@ -140,7 +141,7 @@ fun GlassAlertDialog(
             depth = GlassDepth.MID,
             shape = RoundedCornerShape(28.dp),
             backdrop = currentBackdrop,
-            surfaceColor = DesignTokens.BgSurface.copy(alpha = 0.92f),
+            surfaceColor = DesignTokens.BgSurface.copy(alpha = surfaceAlpha),
             saturationOverride = 1.55f,
             tintAlphaOverride = 0.07f,
             modifier = Modifier
@@ -212,6 +213,7 @@ fun GlassAlertDialog(
 @Composable
 fun GlassCustomDialog(
     onDismissRequest: () -> Unit,
+    modifier: Modifier = Modifier.width(300.dp),
     content: @Composable () -> Unit
 ) {
     val currentBackdrop = com.gorilla.gallery.ui.theme.LocalLiquidGlassContentBackdrop.current ?: com.gorilla.gallery.ui.theme.LocalLiquidGlassBackdrop.current
@@ -224,8 +226,7 @@ fun GlassCustomDialog(
             surfaceColor = DesignTokens.BgSurface.copy(alpha = 0.92f),
             saturationOverride = 1.55f,
             tintAlphaOverride = 0.07f,
-            modifier = Modifier
-                .width(300.dp)
+            modifier = modifier
                 .scale(scale)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
@@ -245,7 +246,8 @@ fun DialogPillButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     isPrimary: Boolean = false,
-    textColor: Color = if (isPrimary) com.gorilla.gallery.ui.theme.LocalDynamicColors.current.accent else DesignTokens.TextPrimary.copy(alpha = 0.85f)
+    textColor: Color = if (isPrimary) com.gorilla.gallery.ui.theme.LocalDynamicColors.current.accent else DesignTokens.TextPrimary.copy(alpha = 0.85f),
+    contentPadding: androidx.compose.foundation.layout.PaddingValues = androidx.compose.foundation.layout.PaddingValues(horizontal = 18.dp, vertical = 8.dp)
 ) {
     androidx.compose.foundation.layout.Box(
         modifier = modifier
@@ -257,7 +259,7 @@ fun DialogPillButton(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null
             ) { onClick() }
-            .padding(horizontal = 18.dp, vertical = 8.dp),
+            .padding(contentPadding),
         contentAlignment = Alignment.Center
     ) {
         Text(

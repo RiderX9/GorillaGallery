@@ -123,6 +123,16 @@ fun rememberThemeSettingsItem(
                             enabled = true,
                         )
                     }
+
+                    SettingBlock(
+                        title = "App icon",
+                        subtitle = settings.appIcon.label,
+                    ) {
+                        AppIconGrid(
+                            selected = settings.appIcon,
+                            onSelect = vm::setAppIcon,
+                        )
+                    }
                 }
             }
         },
@@ -287,6 +297,63 @@ fun ColorSwatchRow(
                         Spacer(modifier = Modifier.weight(1f))
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun AppIconGrid(
+    selected: com.gorilla.gallery.data.settings.AppIconChoice,
+    onSelect: (com.gorilla.gallery.data.settings.AppIconChoice) -> Unit,
+) {
+    val entries = com.gorilla.gallery.data.settings.AppIconChoice.entries
+    val accent = LocalDynamicColors.current.accent
+    val appColors = LocalAppColors.current
+    val haptic = rememberHaptic()
+    val trackShape = RoundedCornerShape(22.dp)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(trackShape)
+            .background(appColors.bgGlass)
+            .border(1.dp, appColors.borderGlass, trackShape)
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        entries.forEach { item ->
+            val isSel = item == selected
+            val interaction = remember { MutableInteractionSource() }
+            val optionShape = RoundedCornerShape(18.dp)
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .accentBloom(accent, active = isSel, shape = optionShape)
+                    .pressScale(interaction, pressedScale = 0.95f)
+                    .clip(optionShape)
+                    .background(if (isSel) accent else Color.Transparent)
+                    .clickable(interaction, indication = null) {
+                        if (!isSel) haptic()
+                        onSelect(item)
+                    }
+                    .padding(vertical = 10.dp, horizontal = 2.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                val contentColor = if (isSel) {
+                    if (accent == Color.White) Color.Black else Color.White
+                } else {
+                    appColors.textSecondary
+                }
+
+                Text(
+                    text = item.label,
+                    color = contentColor,
+                    fontSize = 11.sp,
+                    fontWeight = if (isSel) FontWeight.Bold else FontWeight.SemiBold,
+                    maxLines = 1,
+                )
             }
         }
     }
