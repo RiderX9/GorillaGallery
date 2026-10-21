@@ -12,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -23,6 +24,7 @@ class ThumbnailRepository(private val context: Context) {
     }
     private val inFlight = java.util.concurrent.ConcurrentHashMap<String, Mutex>()
 
+    private val ioScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
     private val _evictions = MutableSharedFlow<Long>(extraBufferCapacity = 10)
     val evictions: SharedFlow<Long> = _evictions.asSharedFlow()
     private val prefs = context.getSharedPreferences("stale_thumbs", Context.MODE_PRIVATE)
@@ -31,21 +33,43 @@ class ThumbnailRepository(private val context: Context) {
     }
 
     fun evict(mediaId: Long) {
-        val keys = cache.snapshot().keys.filter { it.startsWith("thumb_v7_${mediaId}_") }
+        val keys = cache.snapshot().keys.filter { it.startsWith("thumb_${mediaId}_") || it.startsWith("thumb_v7_${mediaId}_") }
         for (k in keys) cache.remove(k)
         
         // Also wipe from disk
-        diskCacheDir.listFiles { file -> file.name.startsWith("thumb_v7_${mediaId}_") }?.forEach { it.delete() }
+        diskCacheDir.listFiles { file -> file.name.startsWith("thumb_${mediaId}_") || file.name.startsWith("thumb_v7_${mediaId}_") }?.forEach { it.delete() }
         
         staleOsCacheIds.add(mediaId)
         prefs.edit().putStringSet("stale_ids", staleOsCacheIds.map { it.toString() }.toSet()).apply()
         _evictions.tryEmit(mediaId)
     }
 
+    fun putDirect(mediaId: Long, bitmap: Bitmap, cacheVersion: Long = 0L) {
+        val key = cacheKey(mediaId, 512, cacheVersion, false)
+        cache.put(key, bitmap)
+        val hqKey = cacheKey(mediaId, 1080, cacheVersion, true)
+        cache.put(hqKey, bitmap)
+        _evictions.tryEmit(mediaId)
+    }
+
     private val diskCacheDir = java.io.File(context.noBackupFilesDir, "thumbnails").apply { mkdirs() }
 
     fun getCached(mediaId: Long, sizePx: Int, cacheVersion: Long = 0L, highQuality: Boolean = false): Bitmap? {
-        return cache.get(cacheKey(mediaId, sizePx, cacheVersion, highQuality))
+        val key = cacheKey(mediaId, sizePx, cacheVersion, highQuality)
+        val mem = cache.get(key)
+        if (mem != null) return mem
+
+        val diskFile = java.io.File(diskCacheDir, key)
+        if (diskFile.exists() && diskFile.length() > 0L) {
+            val fromDisk = runCatching {
+                if (highQuality) null else android.graphics.BitmapFactory.decodeFile(diskFile.absolutePath)
+            }.getOrNull()
+            if (fromDisk != null) {
+                cache.put(key, fromDisk)
+                return fromDisk
+            }
+        }
+        return null
     }
 
     fun getAnyCached(mediaId: Long, cacheVersion: Long = 0L, highQuality: Boolean = false): Bitmap? {
@@ -68,10 +92,32 @@ class ThumbnailRepository(private val context: Context) {
             }
         }
         
-        return memMatch?.value
+        if (memMatch?.value != null) return memMatch.value
+
+        if (!highQuality) {
+            val matchingDisk = diskCacheDir.listFiles { file -> 
+                file.name.startsWith(prefix) && file.name.contains(suffixMatch) && file.length() > 0L
+            }?.firstOrNull()
+            if (matchingDisk != null) {
+                val bmp = runCatching { android.graphics.BitmapFactory.decodeFile(matchingDisk.absolutePath) }.getOrNull()
+                if (bmp != null) {
+                    cache.put(matchingDisk.name, bmp)
+                    return bmp
+                }
+            }
+        }
+
+        return null
     }
 
-    suspend fun load(uri: Uri, mediaId: Long, sizePx: Int, cacheVersion: Long = 0L, highQuality: Boolean = false): Bitmap? {
+    suspend fun load(
+        uri: Uri,
+        mediaId: Long,
+        sizePx: Int,
+        cacheVersion: Long = 0L,
+        highQuality: Boolean = false,
+        path: String? = null,
+    ): Bitmap? {
         val key = cacheKey(mediaId, sizePx, cacheVersion, highQuality)
         cache.get(key)?.let { return it }
 
@@ -121,9 +167,12 @@ class ThumbnailRepository(private val context: Context) {
 
             // Generate thumbnail
             val bitmap = withContext(Dispatchers.IO) {
-                if (highQuality) {
+                val mimeType = runCatching { resolver.getType(uri) }.getOrNull()
+                val isSvg = mimeType == "image/svg+xml" || path?.endsWith(".svg", ignoreCase = true) == true || uri.toString().endsWith(".svg", ignoreCase = true)
+                if (isSvg) {
+                    decodeSvgThumbnail(uri, path ?: "", if (highQuality) sizePx * 2 else sizePx, mediaId)
+                } else if (highQuality) {
                     val largeSize = sizePx * 2
-                    val mimeType = resolver.getType(uri)
                     val isVideo = mimeType?.startsWith("video") == true
                     
                     val osBmp = if (isVideo) {
@@ -147,18 +196,23 @@ class ThumbnailRepository(private val context: Context) {
                         } else osBmp
                     } else null
                 } else {
-                    if (staleOsCacheIds.contains(mediaId)) {
-                        decodeFileThumbnail(uri, sizePx, false) ?: decodeVideoFileThumbnail(uri, sizePx)
+                    val mimeType = runCatching { resolver.getType(uri) }.getOrNull()
+                    val isVideo = mimeType?.startsWith("video") == true
+                    if (isVideo) {
+                        decodeVideoFileThumbnail(uri, sizePx)
                     } else {
-                        runCatching { resolver.loadThumbnail(uri, android.util.Size(sizePx, sizePx), null) }
-                            .getOrElse { decodeFileThumbnail(uri, sizePx, false) ?: decodeVideoFileThumbnail(uri, sizePx) }
+                        // Direct native file decode first (like Fossify) in ~5ms!
+                        decodeDirectFile(path, sizePx)
+                            ?: decodeFastThumbnail(uri, sizePx)
+                            ?: runCatching { resolver.loadThumbnail(uri, android.util.Size(sizePx, sizePx), null) }.getOrNull()
+                            ?: decodeFileThumbnail(uri, sizePx, false)
                     }
                 }
             }
             if (bitmap != null) {
                 cache.put(key, bitmap)
-                // Save to disk cache
-                withContext(Dispatchers.IO) {
+                // Save to disk cache asynchronously so the decoded bitmap returns immediately to UI
+                ioScope.launch {
                     runCatching {
                         if (highQuality && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                             java.io.FileOutputStream(diskFile).channel.use { channel ->
@@ -199,6 +253,77 @@ class ThumbnailRepository(private val context: Context) {
         }
     }
 
+    fun prewarm(items: List<com.gorilla.gallery.data.model.MediaItem>, sizePx: Int, highQuality: Boolean = false) {
+        if (items.isEmpty()) return
+        ioScope.launch {
+            for (item in items) {
+                val key = cacheKey(item.id, sizePx, item.dateModifiedSec, highQuality)
+                if (cache.get(key) != null) continue
+                load(item.uri, item.id, sizePx, item.dateModifiedSec, highQuality, item.absolutePath)
+            }
+        }
+    }
+
+    private fun decodeDirectFile(path: String?, sizePx: Int): Bitmap? {
+        if (path.isNullOrEmpty()) return null
+        return runCatching {
+            val file = java.io.File(path)
+            if (!file.exists() || !file.canRead() || file.length() == 0L) return null
+
+            // Read dimensions cheaply in native C++
+            val boundsOpts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeFile(path, boundsOpts)
+            val origW = boundsOpts.outWidth
+            val origH = boundsOpts.outHeight
+            if (origW <= 0 || origH <= 0) return null
+
+            var sampleSize = 1
+            val longest = maxOf(origW, origH)
+            while (longest / (sampleSize * 2) >= sizePx) {
+                sampleSize *= 2
+            }
+
+            val decodeOpts = android.graphics.BitmapFactory.Options().apply {
+                inSampleSize = sampleSize
+                inPreferredConfig = Bitmap.Config.RGB_565
+            }
+            val decoded = android.graphics.BitmapFactory.decodeFile(path, decodeOpts) ?: return null
+
+            // Read EXIF orientation directly from file path in 0.5ms
+            val exif = androidx.exifinterface.media.ExifInterface(path)
+            val orientation = exif.getAttributeInt(
+                androidx.exifinterface.media.ExifInterface.TAG_ORIENTATION,
+                androidx.exifinterface.media.ExifInterface.ORIENTATION_NORMAL
+            )
+            var result = decoded
+            val matrix = android.graphics.Matrix()
+            when (orientation) {
+                androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+                androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+                androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+                androidx.exifinterface.media.ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.postScale(-1f, 1f)
+                androidx.exifinterface.media.ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.postScale(1f, -1f)
+            }
+            if (!matrix.isIdentity) {
+                val rotated = Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
+                if (rotated !== decoded) decoded.recycle()
+                result = rotated
+            }
+
+            val curLongest = maxOf(result.width, result.height)
+            if (curLongest > sizePx * 1.3f) {
+                val scale = sizePx.toFloat() / curLongest
+                val dstW = (result.width * scale).toInt().coerceAtLeast(1)
+                val dstH = (result.height * scale).toInt().coerceAtLeast(1)
+                val scaled = Bitmap.createScaledBitmap(result, dstW, dstH, true)
+                if (scaled !== result) result.recycle()
+                scaled
+            } else {
+                result
+            }
+        }.getOrNull()
+    }
+
     private fun lockFor(key: String): Mutex = inFlight.getOrPut(key) { Mutex() }
 
     private fun releaseLock(key: String, mutex: Mutex) {
@@ -210,6 +335,49 @@ class ThumbnailRepository(private val context: Context) {
     private fun cacheKey(mediaId: Long, sizePx: Int, cacheVersion: Long, highQuality: Boolean = false): String =
         "thumb_${mediaId}_${sizePx}_${cacheVersion}_$highQuality"
 
+    private fun decodeFastThumbnail(uri: Uri, sizePx: Int): Bitmap? {
+        // Fast path 1: Check embedded EXIF thumbnail (~1ms)
+        runCatching {
+            resolver.openInputStream(uri)?.use { stream ->
+                val exif = androidx.exifinterface.media.ExifInterface(stream)
+                val thumbBmp = exif.thumbnailBitmap
+                if (thumbBmp != null) {
+                    val longest = maxOf(thumbBmp.width, thumbBmp.height)
+                    val orientation = exif.getAttributeInt(
+                        androidx.exifinterface.media.ExifInterface.TAG_ORIENTATION,
+                        androidx.exifinterface.media.ExifInterface.ORIENTATION_NORMAL
+                    )
+                    var result = thumbBmp
+                    val matrix = android.graphics.Matrix()
+                    when (orientation) {
+                        androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+                        androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+                        androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+                        androidx.exifinterface.media.ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.postScale(-1f, 1f)
+                        androidx.exifinterface.media.ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.postScale(1f, -1f)
+                    }
+                    if (!matrix.isIdentity) {
+                        val rotated = Bitmap.createBitmap(thumbBmp, 0, 0, thumbBmp.width, thumbBmp.height, matrix, true)
+                        if (rotated !== thumbBmp) thumbBmp.recycle()
+                        result = rotated
+                    }
+                    if (longest > sizePx * 1.5f) {
+                        val scale = sizePx.toFloat() / longest
+                        val dstW = (result.width * scale).toInt().coerceAtLeast(1)
+                        val dstH = (result.height * scale).toInt().coerceAtLeast(1)
+                        val scaled = Bitmap.createScaledBitmap(result, dstW, dstH, true)
+                        if (scaled !== result) result.recycle()
+                        result = scaled
+                    }
+                    return result
+                }
+            }
+        }
+
+        // Fast path 2: Direct downsample via ImageDecoder.setTargetSize (~10-15ms)
+        return decodeFileThumbnail(uri, sizePx, false)
+    }
+
     private fun decodeFileThumbnail(uri: Uri, sizePx: Int, highQuality: Boolean = false): Bitmap? =
         runCatching {
             val source = if (uri.scheme == ContentResolver.SCHEME_FILE) {
@@ -218,7 +386,6 @@ class ThumbnailRepository(private val context: Context) {
                 ImageDecoder.createSource(resolver, uri)
             }
             
-            var needsManualScale = false
             var targetW = 0
             var targetH = 0
             
@@ -233,21 +400,13 @@ class ThumbnailRepository(private val context: Context) {
                 val scale = sizePx.toFloat() / longest
                 
                 if (scale < 1f) {
-                    if (width * height <= 5_000_000) {
-                        decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-                        needsManualScale = true
-                        targetW = (width * scale).toInt().coerceAtLeast(1)
-                        targetH = (height * scale).toInt().coerceAtLeast(1)
-                    } else {
-                        decoder.setTargetSize(
-                            (width * scale).toInt().coerceAtLeast(1),
-                            (height * scale).toInt().coerceAtLeast(1),
-                        )
-                    }
+                    targetW = (width * scale).toInt().coerceAtLeast(1)
+                    targetH = (height * scale).toInt().coerceAtLeast(1)
+                    decoder.setTargetSize(targetW, targetH)
                 }
             }
             
-            if (needsManualScale && (decoded.width > targetW || decoded.height > targetH)) {
+            if (targetW > 0 && targetH > 0 && (decoded.width > targetW * 1.25f || decoded.height > targetH * 1.25f)) {
                 val scaled = Bitmap.createScaledBitmap(decoded, targetW, targetH, true)
                 if (scaled !== decoded) {
                     decoded.recycle()
@@ -339,6 +498,62 @@ class ThumbnailRepository(private val context: Context) {
                         }
                     } else bmp
                 }
+            }
+        }.getOrNull()
+    }
+
+    val svgDimensionsCache = java.util.concurrent.ConcurrentHashMap<Long, android.util.Size>()
+
+    fun getSvgDimensions(mediaId: Long, uri: Uri): android.util.Size? {
+        svgDimensionsCache[mediaId]?.let { return it }
+        return runCatching {
+            resolver.openInputStream(uri)?.use { s ->
+                val svg = com.caverock.androidsvg.SVG.getFromInputStream(s)
+                val docW = svg.documentWidth
+                val docH = svg.documentHeight
+                val vb = svg.documentViewBox
+                val srcW = if (docW > 0) docW else vb?.width() ?: 0f
+                val srcH = if (docH > 0) docH else vb?.height() ?: 0f
+                if (srcW > 0f && srcH > 0f) {
+                    val size = android.util.Size(srcW.toInt(), srcH.toInt())
+                    svgDimensionsCache[mediaId] = size
+                    size
+                } else null
+            }
+        }.getOrNull()
+    }
+
+    private fun decodeSvgThumbnail(uri: Uri, path: String, sizePx: Int, mediaId: Long = 0L): Bitmap? {
+        return runCatching {
+            val stream = runCatching { resolver.openInputStream(uri) }.getOrNull()
+                ?: if (path.isNotEmpty() && java.io.File(path).exists()) {
+                    runCatching { java.io.FileInputStream(path) }.getOrNull()
+                } else null
+            stream?.use { s ->
+                val svg = com.caverock.androidsvg.SVG.getFromInputStream(s)
+                val docW = svg.documentWidth
+                val docH = svg.documentHeight
+                val vb = svg.documentViewBox
+                val srcW = if (docW > 0) docW else vb?.width() ?: 512f
+                val srcH = if (docH > 0) docH else vb?.height() ?: 512f
+                if (srcW > 0f && srcH > 0f && mediaId != 0L) {
+                    svgDimensionsCache[mediaId] = android.util.Size(srcW.toInt(), srcH.toInt())
+                }
+                val maxDim = maxOf(srcW, srcH).coerceAtLeast(1f)
+                val scale = sizePx.toFloat() / maxDim
+                val dstW = (srcW * scale).toInt().coerceAtLeast(1)
+                val dstH = (srcH * scale).toInt().coerceAtLeast(1)
+
+                if (vb == null && docW > 0 && docH > 0) {
+                    svg.setDocumentViewBox(0f, 0f, docW, docH)
+                }
+                svg.setDocumentWidth("100%")
+                svg.setDocumentHeight("100%")
+
+                val bmp = Bitmap.createBitmap(dstW, dstH, Bitmap.Config.ARGB_8888)
+                val canvas = android.graphics.Canvas(bmp)
+                svg.renderToCanvas(canvas)
+                bmp
             }
         }.getOrNull()
     }

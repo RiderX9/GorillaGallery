@@ -71,7 +71,7 @@ class MediaStoreRepository(
     val libraryEmpty: StateFlow<Boolean?> = _libraryEmpty
 
     /** All cached items with favourite flags merged. Source for timeline/albums/search. */
-    val items: Flow<List<MediaItem>> =
+    val items: StateFlow<List<MediaItem>> =
         combine(mediaDao.observeAll(), favoriteDao.observeIds()) { entities, favIds ->
             val favSet = favIds.toHashSet()
             entities.map { 
@@ -115,13 +115,12 @@ class MediaStoreRepository(
 
     /**
      * Incremental: upsert new/modified rows and prune deletions, WITHOUT re-reading the whole
-     * library. New captures and in-place edits both bump DATE_MODIFIED, so the most-recent rows by
-     * DATE_MODIFIED contain every change — reading a small window of them makes new media appear
-     * near-instantly instead of after a full-library scan.
+     * library. Returns the list of newly discovered items so callers (like NewMediaJobService)
+     * can immediately pre-cache their thumbnails.
      */
-    suspend fun incrementalScan(): Int = withContext(Dispatchers.IO) {
+    suspend fun incrementalScanItems(): List<MediaItem> = withContext(Dispatchers.IO) {
         val recent = queryRecent(RECENT_WINDOW)
-        if (recent.isEmpty() && mediaDao.count() > 0) return@withContext 0
+        if (recent.isEmpty() && mediaDao.count() > 0) return@withContext emptyList()
 
         val stamps = mediaDao.getStamps().associate { it.id to it.dateModifiedSec }
         val changed = recent.filter { stamps[it.id] != it.dateModifiedSec }
@@ -129,7 +128,15 @@ class MediaStoreRepository(
         // If EVERY row in the window is unknown, a bulk import may extend past the window — fall
         // back to a full scan so nothing is missed. The common single-capture case never hits this.
         if (changed.isNotEmpty() && changed.size == recent.size && recent.isNotEmpty()) {
-            return@withContext fullReconcile()
+            val fresh = queryAll()
+            if (fresh.isEmpty() && mediaDao.count() > 0) return@withContext emptyList()
+            val freshStamps = mediaDao.getStamps().associate { it.id to it.dateModifiedSec }
+            val fullChanged = fresh.filter { freshStamps[it.id] != it.dateModifiedSec }
+            if (fullChanged.isNotEmpty()) mediaDao.upsertAll(fullChanged.map { MediaEntity.from(it) })
+            val freshIds = fresh.map { it.id }.toHashSet()
+            val removed = freshStamps.keys.filter { it !in freshIds }
+            if (removed.isNotEmpty()) mediaDao.deleteByIds(removed)
+            return@withContext fullChanged.filter { it.id !in freshStamps }
         }
 
         if (changed.isNotEmpty()) mediaDao.upsertAll(changed.map { MediaEntity.from(it) })
@@ -140,8 +147,10 @@ class MediaStoreRepository(
             val removed = stamps.keys.filter { it !in liveIds }
             if (removed.isNotEmpty()) mediaDao.deleteByIds(removed)
         }
-        changed.count { it.id !in stamps }
+        changed.filter { it.id !in stamps }
     }
+
+    suspend fun incrementalScan(): Int = incrementalScanItems().size
 
     /** Full diff against the entire library — the incremental fallback for bulk imports. */
     private suspend fun fullReconcile(): Int {
@@ -212,11 +221,14 @@ class MediaStoreRepository(
             while (c.moveToNext()) {
                 val id = c.getLong(idC)
                 val isVideo = c.getInt(typeC) == FileColumns.MEDIA_TYPE_VIDEO
+                val isImage = c.getInt(typeC) == FileColumns.MEDIA_TYPE_IMAGE
                 val type = if (isVideo) MediaType.VIDEO else MediaType.IMAGE
                 val collectionUri = if (isVideo) {
                     MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-                } else {
+                } else if (isImage) {
                     MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                } else {
+                    MEDIA_COLLECTION
                 }
                 val dateAdded = c.getLong(addedC)
                 val dateModified = c.getLong(modC)
@@ -510,7 +522,7 @@ class MediaStoreRepository(
             FileColumns.RELATIVE_PATH, FileColumns.ORIENTATION,
             FileColumns.DURATION, FileColumns.MEDIA_TYPE, android.provider.MediaStore.MediaColumns.DATA,
         )
-        private const val MEDIA_SELECTION = "${FileColumns.MEDIA_TYPE} IN (?, ?)"
+        private const val MEDIA_SELECTION = "(${FileColumns.MEDIA_TYPE} IN (?, ?) OR ${FileColumns.MIME_TYPE} = 'image/svg+xml' OR ${FileColumns.DISPLAY_NAME} LIKE '%.svg')"
         private val MEDIA_ARGS = arrayOf(
             FileColumns.MEDIA_TYPE_IMAGE.toString(),
             FileColumns.MEDIA_TYPE_VIDEO.toString(),

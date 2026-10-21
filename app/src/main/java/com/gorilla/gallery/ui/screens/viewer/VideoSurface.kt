@@ -130,7 +130,8 @@ fun VideoSurface(
     onVideoSize: (Int, Int) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
     videoModifier: Modifier = Modifier,
-    zoomModifier: Modifier = Modifier
+    zoomModifier: Modifier = Modifier,
+    refreshTrigger: Int = 0,
 ) {
     val context = LocalContext.current
     val accent = LocalDynamicColors.current.accent
@@ -147,7 +148,7 @@ fun VideoSurface(
         onProvideBackdrop(videoFrameBackdrop)
     }
 
-    val exo = remember(item.uri) {
+    val exo = remember(item.uri, refreshTrigger) {
         val renderersFactory = androidx.media3.exoplayer.DefaultRenderersFactory(context)
             .setExtensionRendererMode(androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
         ExoPlayer.Builder(context, renderersFactory).build().apply {
@@ -159,7 +160,7 @@ fun VideoSurface(
     }
 
 
-    var isFirstFrameRendered by remember(item.uri) { mutableStateOf(false) }
+    var isFirstFrameRendered by remember(item.uri, refreshTrigger) { mutableStateOf(false) }
     DisposableEffect(exo) {
         val listener = object : Player.Listener {
             override fun onRenderedFirstFrame() {
@@ -232,8 +233,8 @@ fun VideoSurface(
     }
 
     var muted by remember { mutableStateOf(false) }
-    var positionMs by remember { mutableLongStateOf(0L) }
-    var durationMs by remember { mutableLongStateOf(item.durationMs) }
+    var positionMs by remember(item.uri, refreshTrigger) { mutableLongStateOf(0L) }
+    var durationMs by remember(item.uri, refreshTrigger) { mutableLongStateOf(item.durationMs) }
     var isScrubbing by remember { mutableStateOf(false) }
     var scrubPositionMs by remember { mutableLongStateOf(0L) }
     var wasPlayingBeforeScrub by remember { mutableStateOf(false) }
@@ -280,7 +281,7 @@ fun VideoSurface(
         onDispose { lifecycle.removeObserver(obs) }
     }
 
-    LaunchedEffect(isActive, dismissRequested) {
+    LaunchedEffect(exo, isActive, dismissRequested) {
         val shouldPlay = isActive && !dismissRequested
         exo.playWhenReady = shouldPlay
         if (shouldPlay) {
@@ -357,6 +358,10 @@ fun VideoSurface(
                             }
                         },
                         update = { view ->
+                            if (view.player !== exo) {
+                                view.player = exo
+                                onVideoTextureUpdate(view.videoSurfaceView as? android.view.TextureView)
+                            }
                             view.resizeMode = if (cropToFill) {
                                 AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                             } else {

@@ -35,6 +35,7 @@ class SettingsRepository(private val context: Context) {
         val surfaceOpacity = androidx.datastore.preferences.core.floatPreferencesKey("surface_opacity")
         val gridColumns = intPreferencesKey("grid_columns")
         val dateGranularity = stringPreferencesKey("date_granularity")
+        val bottomBarStyle = stringPreferencesKey("bottom_bar_style")
         val highQualityThumbnails = booleanPreferencesKey("high_quality_thumbnails")
         val playerSliderStyle = stringPreferencesKey("player_slider_style")
         val loopVideos = booleanPreferencesKey("loop_videos")
@@ -42,6 +43,7 @@ class SettingsRepository(private val context: Context) {
         val enablePipMode = booleanPreferencesKey("enable_pip_mode")
         val moveToTrashByDefaultForDelete = booleanPreferencesKey("move_to_trash_by_default")
         val showScrollbar = booleanPreferencesKey("show_scrollbar")
+        val autoHideBottomBar = booleanPreferencesKey("auto_hide_bottom_bar")
         val secureEnabled = booleanPreferencesKey("secure_enabled")
         val biometricUnlock = booleanPreferencesKey("biometric_unlock")
         val showSecureInAlbums = booleanPreferencesKey("show_secure_in_albums")
@@ -59,6 +61,7 @@ class SettingsRepository(private val context: Context) {
             surfaceOpacity = p[Keys.surfaceOpacity] ?: 0.4f,
             gridColumns = (p[Keys.gridColumns] ?: 3).coerceIn(2, 6),
             dateGranularity = p[Keys.dateGranularity]?.let { runCatching { DateGranularity.valueOf(it) }.getOrNull() } ?: DateGranularity.ALL,
+            bottomBarStyle = p[Keys.bottomBarStyle]?.let { runCatching { BottomBarStyle.valueOf(it) }.getOrNull() } ?: BottomBarStyle.SPLIT,
             highQualityThumbnails = p[Keys.highQualityThumbnails] ?: false,
             playerSliderStyle = p[Keys.playerSliderStyle]?.let { runCatching { PlayerSliderStyle.valueOf(it) }.getOrNull() } ?: PlayerSliderStyle.DEFAULT,
             loopVideos = p[Keys.loopVideos] ?: false,
@@ -66,6 +69,7 @@ class SettingsRepository(private val context: Context) {
             enablePipMode = p[Keys.enablePipMode] ?: false,
             moveToTrashByDefaultForDelete = p[Keys.moveToTrashByDefaultForDelete] ?: true,
             showScrollbar = p[Keys.showScrollbar] ?: false,
+            autoHideBottomBar = p[Keys.autoHideBottomBar] ?: false,
             secureFolderEnabled = p[Keys.secureEnabled] ?: false,
             biometricUnlock = p[Keys.biometricUnlock] ?: true,
             showSecureInAlbums = p[Keys.showSecureInAlbums] ?: true,
@@ -84,6 +88,7 @@ class SettingsRepository(private val context: Context) {
     suspend fun setSurfaceOpacity(v: Float) = edit { it[Keys.surfaceOpacity] = v }
     suspend fun setGridColumns(v: Int) = edit { it[Keys.gridColumns] = v.coerceIn(2, 6) }
     suspend fun setDateGranularity(v: DateGranularity) = edit { it[Keys.dateGranularity] = v.name }
+    suspend fun setBottomBarStyle(v: BottomBarStyle) = edit { it[Keys.bottomBarStyle] = v.name }
     suspend fun setHighQualityThumbnails(v: Boolean) = edit { it[Keys.highQualityThumbnails] = v }
     suspend fun setPlayerSliderStyle(v: PlayerSliderStyle) = edit { it[Keys.playerSliderStyle] = v.name }
     suspend fun setLoopVideos(v: Boolean) = edit { it[Keys.loopVideos] = v }
@@ -91,6 +96,7 @@ class SettingsRepository(private val context: Context) {
     suspend fun setEnablePipMode(v: Boolean) = edit { it[Keys.enablePipMode] = v }
     suspend fun setMoveToTrashByDefaultForDelete(v: Boolean) = edit { it[Keys.moveToTrashByDefaultForDelete] = v }
     suspend fun setShowScrollbar(v: Boolean) = edit { it[Keys.showScrollbar] = v }
+    suspend fun setAutoHideBottomBar(v: Boolean) = edit { it[Keys.autoHideBottomBar] = v }
 
     suspend fun setSecureFolderEnabled(v: Boolean) = edit { it[Keys.secureEnabled] = v }
     suspend fun setBiometricUnlock(v: Boolean) = edit { it[Keys.biometricUnlock] = v }

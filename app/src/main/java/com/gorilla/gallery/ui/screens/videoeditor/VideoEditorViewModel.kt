@@ -97,11 +97,25 @@ class VideoEditorViewModel(private val container: AppContainer) : ViewModel() {
                 app.showSnackbar.tryEmit("Video overwritten")
                 container.thumbnailRepository.evict(item.id)
                 container.mediaRepository.scan()
+                val newThumb = container.thumbnailRepository.load(
+                    uri = item.uri,
+                    mediaId = item.id,
+                    sizePx = 640,
+                    cacheVersion = item.dateModifiedSec,
+                    path = item.absolutePath
+                )
+                if (newThumb != null) {
+                    container.thumbnailRepository.putDirect(item.id, newThumb, item.dateModifiedSec)
+                    container.thumbnailRepository.putDirect(item.id, newThumb, 0L)
+                }
+                app.bumpRefresh()
+                kotlinx.coroutines.delay(200)
+                _saving.value = false
                 onDone()
             }.onFailure {
                 app.showSnackbar.tryEmit("Video export failed")
+                _saving.value = false
             }
-            _saving.value = false
         }
     }
 

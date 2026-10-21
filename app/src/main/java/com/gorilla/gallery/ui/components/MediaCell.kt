@@ -23,6 +23,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -83,16 +87,23 @@ fun MediaCell(
                 ?: app.container.thumbnailRepository.getAnyCached(item.id, item.dateModifiedSec, highQualityThumbnails)
         ) 
     }
+    val hadThumbOnInit = remember(item.id) { thumbnail != null }
+    val thumbAlpha by animateFloatAsState(
+        targetValue = if (thumbnail != null) 1f else 0f,
+        animationSpec = if (hadThumbOnInit) snap() else tween(durationMillis = 180, easing = LinearOutSlowInEasing),
+        label = "thumbAlpha",
+    )
     var bounds by remember { mutableStateOf(Rect.Zero) }
 
     LaunchedEffect(item.id, item.uri, thumbnailSizePx, highQualityThumbnails) {
-        if (!highQualityThumbnails) {
+        if (!highQualityThumbnails || item.isSvg) {
             thumbnail = app.container.thumbnailRepository.load(
                 uri = item.uri,
                 mediaId = item.id,
                 sizePx = thumbnailSizePx,
                 cacheVersion = item.dateModifiedSec,
                 highQuality = highQualityThumbnails,
+                path = item.absolutePath,
             )
             app.container.thumbnailRepository.evictions.collect { evictedId ->
                 if (evictedId == item.id) {
@@ -102,6 +113,7 @@ fun MediaCell(
                         sizePx = thumbnailSizePx,
                         cacheVersion = item.dateModifiedSec,
                         highQuality = highQualityThumbnails,
+                        path = item.absolutePath,
                     )
                 }
             }
@@ -119,7 +131,7 @@ fun MediaCell(
             .aspectRatio(1f)
             .pressScale(interaction, pressedScale = 0.96f)
             .clip(CellShape)
-            .background(Color.White.copy(alpha = 0.04f))
+            .background(Color(0xFF141414))
             .onGloballyPositioned { bounds = it.boundsInWindow(); app.itemBounds[item.uri] = bounds }
             .combinedClickable(
                 interactionSource = interaction,
@@ -129,14 +141,20 @@ fun MediaCell(
             ),
     ) {
         val currentThumb = thumbnail
-        if (currentThumb != null && !highQualityThumbnails) {
-            Image(
-                bitmap = currentThumb.asImageBitmap(),
-                contentDescription = item.displayName,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize().scale(scale).clip(CellShape),
-            )
-        } else {
+        if (item.isSvg) {
+            if (currentThumb != null) {
+                Image(
+                    bitmap = currentThumb.asImageBitmap(),
+                    contentDescription = item.displayName,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .scale(scale)
+                        .clip(CellShape)
+                        .graphicsLayer { alpha = thumbAlpha },
+                )
+            }
+        } else if (highQualityThumbnails) {
             @OptIn(com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi::class)
             com.bumptech.glide.integration.compose.GlideImage(
                 model = item.absolutePath.takeIf { it.isNotEmpty() } ?: item.uri,
@@ -151,6 +169,17 @@ fun MediaCell(
                 }
                 req.dontAnimate().signature(com.bumptech.glide.signature.ObjectKey("${item.dateModifiedSec}"))
             }
+        } else if (currentThumb != null) {
+            Image(
+                bitmap = currentThumb.asImageBitmap(),
+                contentDescription = item.displayName,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .scale(scale)
+                    .clip(CellShape)
+                    .graphicsLayer { alpha = thumbAlpha },
+            )
         }
 
         // Video affordances: play glyph + duration pill.

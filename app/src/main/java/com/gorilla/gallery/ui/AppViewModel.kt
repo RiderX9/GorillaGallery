@@ -82,6 +82,10 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     var refreshTrigger by mutableStateOf(0)
         private set
 
+    fun bumpRefresh() {
+        refreshTrigger++
+    }
+
 
 
     private val _resetToTop = MutableStateFlow(false)
@@ -127,7 +131,18 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     init {
         viewModelScope.launch {
-            mediaRepo.scanResults.collect { mediaAdded.tryEmit(it) }
+            mediaRepo.scanResults.collect { added ->
+                mediaAdded.tryEmit(added)
+                if (added > 0) {
+                    val dm = container.context.resources.displayMetrics
+                    val minDimPx = minOf(dm.widthPixels, dm.heightPixels)
+                    val sizePx = ((minDimPx / 2) - 6).coerceAtLeast(1)
+                    val targetSize = if (settings.value.highQualityThumbnails) sizePx * 2 else sizePx
+                    val currentItems = mediaRepo.items.value
+                    val toPrewarm = currentItems.take(added.coerceAtMost(48))
+                    container.thumbnailRepository.prewarm(toPrewarm, targetSize, settings.value.highQualityThumbnails)
+                }
+            }
         }
         // Sweep expired trash on launch.
         viewModelScope.launch { trashRepo.emptyExpired() }
@@ -142,6 +157,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         if (!granted || started) return
         started = true
         viewModelScope.launch {
+            com.gorilla.gallery.data.service.NewMediaJobService.scheduleJob(container.context)
             mediaRepo.scan()
             mediaRepo.startObserving()
             ImageLabelingWorker.enqueue(container.context)
@@ -578,21 +594,37 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
                     val cb = pendingOverwriteCallback
                     if (approved && uri != null && bmp != null) {
                         editorRepo.overwrite(uri, bmp)
-                        uri.lastPathSegment?.toLongOrNull()?.let { id ->
-                            container.thumbnailRepository.evict(id)
+                        val id = uri.lastPathSegment?.toLongOrNull()
+                        if (id != null) {
+                            container.thumbnailRepository.putDirect(id, bmp, 0L)
+                        }
+                        val currentItem = mediaRepo.items.value.firstOrNull { it.uri == uri }
+                        if (currentItem != null) {
+                            container.thumbnailRepository.putDirect(currentItem.id, bmp, currentItem.dateModifiedSec)
                         }
                         container.mediaRepository.scan()
                         refreshTrigger++
                         
                         val modified = System.currentTimeMillis() / 1000
-                        val req = coil.request.ImageRequest.Builder(container.context)
+                        val req1 = coil.request.ImageRequest.Builder(container.context)
                             .data(uri)
                             .setParameter("date_modified", modified)
                             .memoryCacheKey("${uri}_${modified}_${refreshTrigger}")
                             .diskCacheKey("${uri}_${modified}_${refreshTrigger}")
                             .build()
-                        coil.Coil.imageLoader(container.context).execute(req)
+                        coil.Coil.imageLoader(container.context).execute(req1)
+
+                        if (currentItem != null) {
+                            val req2 = coil.request.ImageRequest.Builder(container.context)
+                                .data(uri)
+                                .setParameter("date_modified", currentItem.dateModifiedSec)
+                                .memoryCacheKey("${uri}_${currentItem.dateModifiedSec}_${refreshTrigger}")
+                                .diskCacheKey("${uri}_${currentItem.dateModifiedSec}_${refreshTrigger}")
+                                .build()
+                            coil.Coil.imageLoader(container.context).execute(req2)
+                        }
                         
+                        kotlinx.coroutines.delay(150)
                         showSnackbar.tryEmit("Saved")
                     }
                     pendingOverwriteBitmap = null

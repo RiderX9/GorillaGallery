@@ -147,6 +147,23 @@ fun SettingsScreen(
                         )
                     )
                 }
+                if ("bottom bar style navigation split full".contains(searchLower)) {
+                    add(
+                        GlassSettingsItem(
+                            title = "Bottom Bar Style",
+                            icon = Icons.Rounded.ViewStream,
+                            bottomContent = {
+                                Box(Modifier.padding(top = 12.dp)) {
+                                    GlassSegmentedControl(
+                                        options = com.gorilla.gallery.data.settings.BottomBarStyle.entries.map { it to it.label },
+                                        selected = settings.bottomBarStyle,
+                                        onSelect = { vm.setBottomBarStyle(it) }
+                                    )
+                                }
+                            }
+                        )
+                    )
+                }
                 if ("high quality thumbnails".contains(searchLower)) {
                     add(
                         GlassSettingsItem(
@@ -371,6 +388,22 @@ private fun GeneralSection(settings: AppSettings, vm: SettingsViewModel, searchL
                         androidx.compose.material3.Switch(
                             checked = settings.showScrollbar,
                             onCheckedChange = { vm.setShowScrollbar(it) }
+                        )
+                    }
+                )
+            )
+        }
+
+        if ("auto hide bottom bar scroll".contains(searchLower)) {
+            add(
+                GlassSettingsItem(
+                    title = "Auto-hide Bottom Bar",
+                    subtitle = "Slide bottom bar out of view when scrolling down in photo grids",
+                    icon = Icons.Rounded.VerticalAlignBottom,
+                    trailingContent = {
+                        androidx.compose.material3.Switch(
+                            checked = settings.autoHideBottomBar,
+                            onCheckedChange = { vm.setAutoHideBottomBar(it) }
                         )
                     }
                 )

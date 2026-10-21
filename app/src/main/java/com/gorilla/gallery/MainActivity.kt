@@ -89,25 +89,10 @@ class MainActivity : FragmentActivity(), BiometricGateway {
         if (intent?.action == android.content.Intent.ACTION_VIEW) {
             val uri = intent?.data
             if (uri != null) {
-                val mime = intent?.type ?: contentResolver.getType(uri) ?: ""
+                var mime = intent?.type ?: contentResolver.getType(uri) ?: ""
                 var width = 0
                 var height = 0
                 var durationMs = 0L
-                try {
-                    val retriever = android.media.MediaMetadataRetriever()
-                    retriever.setDataSource(this, uri)
-                    width = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_IMAGE_WIDTH)?.toIntOrNull() ?: 0
-                    height = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_IMAGE_HEIGHT)?.toIntOrNull() ?: 0
-                    durationMs = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
-                    
-                    val rotation = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
-                    if (rotation == 90 || rotation == 270) {
-                        val temp = width
-                        width = height
-                        height = temp
-                    }
-                    retriever.release()
-                } catch (e: Exception) {}
 
                 var displayName = "External"
                 var sizeBytes = 0L
@@ -121,6 +106,46 @@ class MainActivity : FragmentActivity(), BiometricGateway {
                     }
                     cursor?.close()
                 } catch (e: Exception) {}
+
+                if (mime.isEmpty() || mime == "*/*" || mime == "application/octet-stream") {
+                    if (displayName.endsWith(".svg", ignoreCase = true) || uri.lastPathSegment?.endsWith(".svg", ignoreCase = true) == true) {
+                        mime = "image/svg+xml"
+                    }
+                }
+
+                if (mime == "image/svg+xml" || displayName.endsWith(".svg", ignoreCase = true)) {
+                    mime = "image/svg+xml"
+                    try {
+                        contentResolver.openInputStream(uri)?.use { stream ->
+                            val svg = com.caverock.androidsvg.SVG.getFromInputStream(stream)
+                            val docW = svg.documentWidth
+                            val docH = svg.documentHeight
+                            val vb = svg.documentViewBox
+                            val w = if (docW > 0) docW.toInt() else vb?.width()?.toInt() ?: 0
+                            val h = if (docH > 0) docH.toInt() else vb?.height()?.toInt() ?: 0
+                            if (w > 0 && h > 0) {
+                                width = w
+                                height = h
+                            }
+                        }
+                    } catch (e: Exception) {}
+                } else {
+                    try {
+                        val retriever = android.media.MediaMetadataRetriever()
+                        retriever.setDataSource(this, uri)
+                        width = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_IMAGE_WIDTH)?.toIntOrNull() ?: 0
+                        height = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_IMAGE_HEIGHT)?.toIntOrNull() ?: 0
+                        durationMs = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                        
+                        val rotation = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+                        if (rotation == 90 || rotation == 270) {
+                            val temp = width
+                            width = height
+                            height = temp
+                        }
+                        retriever.release()
+                    } catch (e: Exception) {}
+                }
 
                 externalItem = com.gorilla.gallery.data.model.MediaItem(
                     id = -1,

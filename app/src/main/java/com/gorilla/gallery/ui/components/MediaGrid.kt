@@ -1,6 +1,7 @@
 package com.gorilla.gallery.ui.components
 
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.graphicsLayer
 
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -20,6 +21,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.animation.togetherWith
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -116,6 +120,37 @@ fun MediaGrid(
         }
     }
 
+    val autoHide = com.gorilla.gallery.ui.theme.LocalAppSettings.current.autoHideBottomBar
+    val onBottomBarScroll = com.gorilla.gallery.ui.LocalBottomBarScrollListener.current
+
+    val scrollConnection = remember(autoHide) {
+        if (!autoHide) null else object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                val canScroll = state.canScrollForward || state.canScrollBackward
+                if (canScroll && state.canScrollForward && available.y < -6f) {
+                    onBottomBarScroll(true)
+                } else if (available.y > 6f) {
+                    onBottomBarScroll(false)
+                }
+                return Offset.Zero
+            }
+        }
+    }
+
+    if (autoHide) {
+        androidx.compose.runtime.LaunchedEffect(state.isScrollInProgress) {
+            if (!state.isScrollInProgress) {
+                delay(250)
+                onBottomBarScroll(false)
+            }
+        }
+        androidx.compose.runtime.DisposableEffect(Unit) {
+            onDispose {
+                onBottomBarScroll(false)
+            }
+        }
+    }
+
     val placementSpec = if (state.isScrollInProgress) null else SpringSpecs.BouncyOffsetSpring
 
     Box(modifier = modifier) {
@@ -125,6 +160,7 @@ fun MediaGrid(
             contentPadding = contentPadding,
             modifier = Modifier
                 .fillMaxSize()
+                .then(if (scrollConnection != null) Modifier.nestedScroll(scrollConnection) else Modifier)
             .dragSelectVisibleItems(
                 enabled = dragSelectionEnabled,
                 state = state,
@@ -179,7 +215,7 @@ fun MediaGrid(
                     highQualityThumbnails = highQualityThumbnails,
                     modifier = Modifier
                         .animateItem(placementSpec = placementSpec)
-                        .alpha(if (hideByViewer.value) 0f else 1f)
+                        .graphicsLayer { alpha = if (hideByViewer.value) 0f else 1f }
                         .padding(1.5.dp),
                 )
             }

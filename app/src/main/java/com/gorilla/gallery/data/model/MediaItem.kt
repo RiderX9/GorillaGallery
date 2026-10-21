@@ -35,9 +35,14 @@ data class MediaItem(
     val trashId: String? = null,  // non-null when loaded from the Trash
 ) {
     val isVideo: Boolean get() = type == MediaType.VIDEO
+    val isSvg: Boolean get() = mimeType == "image/svg+xml" || displayName.endsWith(".svg", ignoreCase = true)
     val format: String get() {
         val f = mimeType.substringAfterLast('/').uppercase()
-        return if (f.contains("DNG") || f.contains("RAW")) "RAW" else f
+        return when {
+            f.contains("DNG") || f.contains("RAW") -> "RAW"
+            f.contains("SVG") || isSvg -> "SVG"
+            else -> f
+        }
     }
     val isSecured: Boolean get() = secureId != null
     val isScreenshot: Boolean

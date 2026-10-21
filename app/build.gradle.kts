@@ -16,7 +16,7 @@ android {
         minSdk = 31
         targetSdk = 35
         versionCode = 22
-        versionName = "1.21.1"
+        versionName = "1.22"
 
         vectorDrawables { useSupportLibrary = true }
     }
@@ -110,6 +110,8 @@ dependencies {
     implementation(libs.androidx.exifinterface)
     implementation(libs.coil.compose)
     implementation(libs.coil.video)
+    implementation(libs.coil.svg)
+    implementation("com.caverock:androidsvg-aar:1.4")
     implementation(libs.glide.compose)
     implementation(libs.tensorflow.lite)
     implementation(libs.accompanist.permissions)

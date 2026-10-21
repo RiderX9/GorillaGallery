@@ -77,11 +77,18 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.GraphicsLayerScope
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.input.pointer.util.VelocityTracker
@@ -170,10 +177,15 @@ fun ViewerScreen(
     val dragReset = remember { Animatable(0f) }
     val dragXReset = remember { Animatable(0f) }
     val minimizeProgress = remember { Animatable(if (sourceBounds != null && !skipEnterAnimation) 1f else 0f) }
+    var enableAdjacentPreload by remember { mutableStateOf(skipEnterAnimation || sourceBounds == null) }
     
     LaunchedEffect(Unit) {
         if (minimizeProgress.value > 0f) {
             minimizeProgress.animateTo(0f, tween(durationMillis = 250, easing = FastOutSlowInEasing))
+        }
+        if (!enableAdjacentPreload) {
+            kotlinx.coroutines.delay(200)
+            enableAdjacentPreload = true
         }
     }
     
@@ -213,7 +225,10 @@ fun ViewerScreen(
         closeInProgress = true
         coroutineScope.launch {
             dragReset.stop()
-            if (sourceBounds != null) {
+            val curUri = items.getOrNull(pagerState.currentPage)?.uri
+            val fallback = if (curUri == selectedUri) sourceBounds else null
+            val targetSource = (context.applicationContext as? com.gorilla.gallery.GalleryApp)?.itemBounds?.get(curUri) ?: fallback
+            if (targetSource != null) {
                 handoffProgress.snapTo(0f)
                 minimizeProgress.animateTo(
                     1f,
@@ -337,13 +352,21 @@ fun ViewerScreen(
         }
     }
 
-    val dragProgress = (abs(dragY) / (screenHeightPx * 0.48f)).coerceIn(0f, 1f)
-    val dismissProgress = maxOf(dragProgress, handoffProgress.value, minimizeProgress.value)
+    val dragProgressState = remember(screenHeightPx) {
+        derivedStateOf { (abs(dragY) / (screenHeightPx * 0.48f)).coerceIn(0f, 1f) }
+    }
+    val dragProgress by dragProgressState
+    val dismissProgressState = remember(screenHeightPx) {
+        derivedStateOf { maxOf(dragProgressState.value, handoffProgress.value, minimizeProgress.value) }
+    }
+    val dismissProgress by dismissProgressState
     val returningToGrid = handoffProgress.value > 0f || minimizeProgress.value > 0f
 
     // Report drag progress up so the host's opaque backdrop fades in step, letting the grid show
     // through the swipe-down instead of the photo dragging over black.
-    LaunchedEffect(dismissProgress) { onDismissProgress(dismissProgress) }
+    LaunchedEffect(Unit) {
+        snapshotFlow { dismissProgressState.value }.collect { onDismissProgress(it) }
+    }
 
     val dismissChromeAlpha = (1f - (dismissProgress / 0.08f)).coerceIn(0f, 1f)
     val viewerBackdrop = Color.Black.copy(alpha = 0.82f)
@@ -356,11 +379,45 @@ fun ViewerScreen(
 
     CompositionLocalProvider(LocalLiquidGlassContentBackdrop provides viewerContentBackdrop) {
     Box(Modifier.fillMaxSize()) {
-        Box(modifier = Modifier.fillMaxSize().background(viewerBackdrop.copy(alpha = viewerBackdrop.alpha * (1f - dismissProgress))))
-        Box(Modifier.fillMaxSize().background(viewerShade.copy(alpha = viewerShade.alpha * (1f - dismissProgress))))
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer { alpha = 1f - dismissProgressState.value }
+                .background(viewerBackdrop)
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer { alpha = 1f - dismissProgressState.value }
+                .background(viewerShade)
+        )
 
-        val mediaAspect = if (current.displayWidth > 0 && current.displayHeight > 0) {
-            current.displayWidth.toFloat() / current.displayHeight.toFloat()
+        var currentSvgSize by remember(current.id) {
+            mutableStateOf(
+                if (current.isSvg) {
+                    app.container.thumbnailRepository.svgDimensionsCache[current.id]?.let {
+                        IntSize(it.width, it.height)
+                    } ?: app.container.thumbnailRepository.getSvgDimensions(current.id, current.uri)?.let {
+                        IntSize(it.width, it.height)
+                    }
+                } else null
+            )
+        }
+        LaunchedEffect(current.id) {
+            if (current.isSvg && (current.displayWidth == 0 || current.displayHeight == 0) && currentSvgSize == null) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val size = app.container.thumbnailRepository.getSvgDimensions(current.id, current.uri)
+                    if (size != null) {
+                        currentSvgSize = IntSize(size.width, size.height)
+                    }
+                }
+            }
+        }
+
+        val curW = currentSvgSize?.width ?: current.displayWidth
+        val curH = currentSvgSize?.height ?: current.displayHeight
+        val mediaAspect = if (curW > 0 && curH > 0) {
+            curW.toFloat() / curH.toFloat()
         } else {
             screenWidthPx / screenHeightPx
         }
@@ -380,6 +437,8 @@ fun ViewerScreen(
         val targetCenterY = source?.center?.y ?: screenHeightPx
         val targetTranslationX = targetCenterX - fittedCenterX
         val targetTranslationY = targetCenterY - fittedCenterY
+        val fittedWidthDp = with(density) { fittedWidth.toDp() }
+        val fittedHeightDp = with(density) { fittedHeight.toDp() }
         val returnProgress = minimizeProgress.value.coerceIn(0f, 1f)
         val dragScale = 1f - dragProgress * 0.11f
         val settledScale = dragScale + (1f - dragScale) * returnProgress
@@ -389,8 +448,6 @@ fun ViewerScreen(
         val settledTranslationY = (dragTranslationY * (1f - returnProgress)) + (targetTranslationY * returnProgress)
         val cornerProgress = maxOf(handoffProgress.value, minimizeProgress.value).coerceIn(0f, 1f)
         val cornerRadiusDp = 0f
-        val fittedWidthDp = with(density) { fittedWidth.toDp() }
-        val fittedHeightDp = with(density) { fittedHeight.toDp() }
         val targetWidthDp = source?.let { with(density) { (it.width + 2).toDp() } } ?: fittedWidthDp
         val targetHeightDp = source?.let { with(density) { (it.height + 2).toDp() } } ?: fittedHeightDp
         val mediaWidthDp = lerp(fittedWidthDp, targetWidthDp, returnProgress) * settledScale
@@ -507,15 +564,19 @@ fun ViewerScreen(
         ) {
             HorizontalPager(
                 state = pagerState,
-                beyondViewportPageCount = 1,
+                beyondViewportPageCount = if (enableAdjacentPreload) 1 else 0,
                 pageSpacing = 16.dp,
-                userScrollEnabled = pageScale <= 1.01f && !isEditorOpen,
+                userScrollEnabled = pageScale <= 1.01f && !isEditorOpen && enableAdjacentPreload,
                 modifier = Modifier.fillMaxSize(),
             ) { page ->
                 val item = items[page]
+                val itemSvgDim = if (item.isSvg) {
+                    app.container.thumbnailRepository.svgDimensionsCache[item.id]
+                        ?: app.container.thumbnailRepository.getSvgDimensions(item.id, item.uri)
+                } else null
                 val pageIsRotated = item.orientation == 90 || item.orientation == 270
-                val pageTrueWidth = if (pageIsRotated) item.displayHeight else item.displayWidth
-                val pageTrueHeight = if (pageIsRotated) item.displayWidth else item.displayHeight
+                val pageTrueWidth = itemSvgDim?.width ?: if (pageIsRotated) item.displayHeight else item.displayWidth
+                val pageTrueHeight = itemSvgDim?.height ?: if (pageIsRotated) item.displayWidth else item.displayHeight
                 val pageMediaAspect = if (pageTrueWidth > 0 && pageTrueHeight > 0) {
                     pageTrueWidth.toFloat() / pageTrueHeight.toFloat()
                 } else {
@@ -940,7 +1001,7 @@ private fun ZoomablePage(
     onProvideBackdrop: (com.kyant.backdrop.Backdrop) -> Unit = {},
     onVideoSize: (Int, Int) -> Unit = { _, _ -> },
     onVideoTextureUpdate: (android.view.TextureView?) -> Unit = {},
-    dismissTransform: ViewerDismissTransform = ViewerDismissTransform(0.dp, 0.dp, 0f, 0f, 0.dp, false, 1f, false)
+    dismissTransform: ViewerDismissTransform = ViewerDismissTransform.None
 ) {
     val context = LocalContext.current
     val galleryApp = context.applicationContext as GalleryApp
@@ -970,11 +1031,35 @@ private fun ZoomablePage(
     val scope = rememberCoroutineScope()
     var containerSize by remember { mutableStateOf(IntSize.Zero) }
 
-    LaunchedEffect(item.displayWidth, item.displayHeight) {
-        if (item.displayWidth > 0 && item.displayHeight > 0) {
+    var svgSize by remember(item.id) {
+        mutableStateOf(
+            if (item.isSvg) {
+                galleryApp.container.thumbnailRepository.svgDimensionsCache[item.id]?.let {
+                    IntSize(it.width, it.height)
+                } ?: galleryApp.container.thumbnailRepository.getSvgDimensions(item.id, item.uri)?.let {
+                    IntSize(it.width, it.height)
+                }
+            } else null
+        )
+    }
+    LaunchedEffect(item.id) {
+        if (item.isSvg && (item.displayWidth == 0 || item.displayHeight == 0) && svgSize == null) {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                val size = galleryApp.container.thumbnailRepository.getSvgDimensions(item.id, item.uri)
+                if (size != null) {
+                    svgSize = IntSize(size.width, size.height)
+                }
+            }
+        }
+    }
+    val effectiveWidth = svgSize?.width ?: item.displayWidth
+    val effectiveHeight = svgSize?.height ?: item.displayHeight
+
+    LaunchedEffect(effectiveWidth, effectiveHeight) {
+        if (effectiveWidth > 0 && effectiveHeight > 0) {
             zoomableState.setContentLocation(
                 me.saket.telephoto.zoomable.ZoomableContentLocation.scaledToFitAndCenterAligned(
-                    androidx.compose.ui.geometry.Size(item.displayWidth.toFloat(), item.displayHeight.toFloat())
+                    androidx.compose.ui.geometry.Size(effectiveWidth.toFloat(), effectiveHeight.toFloat())
                 )
             )
         }
@@ -1075,7 +1160,7 @@ private fun ZoomablePage(
                 
                 // Instantly snap to 1f during dismiss to prevent dismiss flicker (no black frames)
                 val bgAlpha = if (dismissingMedia) 1f else loadedBgAlpha
-                val bgModifier = mediaLayerModifier.alpha(bgAlpha)
+                val bgModifier = mediaLayerModifier.graphicsLayer { alpha = bgAlpha }
 
                 // Reuse the grid thumbnail underneath so huge photos never open on a black frame.
                 previewBitmap?.let { bitmap ->
@@ -1099,19 +1184,21 @@ private fun ZoomablePage(
 
                 // Screen-sized smooth preview (always visible during dismiss, hidden during zoom)
                 // Shares Coil memory cache with ZoomableAsyncImage so it decodes instantly with 0 lag.
-                coil.compose.AsyncImage(
-                    model = coilRequest,
-                    contentDescription = null,
-                    contentScale = if (dismissTransform.crop) ContentScale.Crop else ContentScale.Fit,
-                    modifier = bgModifier
-                )
+                if (!item.isSvg) {
+                    coil.compose.AsyncImage(
+                        model = coilRequest,
+                        contentDescription = null,
+                        contentScale = if (dismissTransform.crop) ContentScale.Crop else ContentScale.Fit,
+                        modifier = bgModifier
+                    )
+                }
 
 
-                    val doubleClickListener = androidx.compose.runtime.remember(containerSize, item.displayWidth, item.displayHeight) {
+                    val doubleClickListener = androidx.compose.runtime.remember(containerSize, effectiveWidth, effectiveHeight) {
                         object : me.saket.telephoto.zoomable.DoubleClickToZoomListener {
                             override suspend fun onDoubleClick(state: me.saket.telephoto.zoomable.ZoomableState, centroid: androidx.compose.ui.geometry.Offset) {
-                                if (containerSize.width > 0 && containerSize.height > 0 && item.displayWidth > 0 && item.displayHeight > 0) {
-                                    val baseZoom = kotlin.math.min(containerSize.width.toFloat() / item.displayWidth, containerSize.height.toFloat() / item.displayHeight)
+                                if (containerSize.width > 0 && containerSize.height > 0 && effectiveWidth > 0 && effectiveHeight > 0) {
+                                    val baseZoom = kotlin.math.min(containerSize.width.toFloat() / effectiveWidth, containerSize.height.toFloat() / effectiveHeight)
                                     val targetScale = baseZoom * 2.5f
                                     if (state.contentTransformation.scale.scaleX > baseZoom * 1.05f) {
                                         state.resetZoom()
@@ -1131,7 +1218,9 @@ private fun ZoomablePage(
                         contentScale = if (dismissTransform.crop) ContentScale.Crop else ContentScale.Fit,
                         modifier = Modifier
                             .fillMaxSize()
-                            .alpha(if (dismissingMedia) 0f else 1f),
+                            .graphicsLayer {
+                                alpha = if (dismissingMedia) 0f else 1f
+                            },
                         state = zoomableImageState,
                         onClick = { onTap() },
                         onDoubleClick = doubleClickListener

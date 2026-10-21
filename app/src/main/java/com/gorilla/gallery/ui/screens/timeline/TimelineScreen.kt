@@ -170,9 +170,10 @@ fun TimelineScreen(
             )
         }
     }
-    val thumbnailSizePx = remember(settings.gridColumns, density, configuration.screenWidthDp, settings.highQualityThumbnails) {
+    val thumbnailSizePx = remember(settings.gridColumns, density, configuration.screenWidthDp, configuration.screenHeightDp, settings.highQualityThumbnails) {
         with(density) {
-            val screenWidthPx = configuration.screenWidthDp.dp.roundToPx()
+            val minDimensionDp = minOf(configuration.screenWidthDp, configuration.screenHeightDp)
+            val screenWidthPx = minDimensionDp.dp.roundToPx()
             val spacingPx = (1.5.dp * 2).roundToPx()
             val sizePx = ((screenWidthPx / settings.gridColumns) - spacingPx).coerceAtLeast(1)
             if (settings.highQualityThumbnails) sizePx * 2 else sizePx
@@ -214,21 +215,6 @@ fun TimelineScreen(
     }
 
     LaunchedEffect(flat, thumbnailSizePx) {
-        withContext(Dispatchers.IO) {
-            flat.forEachIndexed { index, item ->
-                app.container.thumbnailRepository.load(
-                    uri = item.uri,
-                    mediaId = item.id,
-                    sizePx = thumbnailSizePx,
-                    cacheVersion = item.dateModifiedSec,
-                    highQuality = settings.highQualityThumbnails,
-                )
-                if (index % 24 == 0) yield()
-            }
-        }
-    }
-
-    LaunchedEffect(flat, thumbnailSizePx) {
         var previousFirstVisible = -1
         snapshotFlow { gridState.firstVisibleItemIndex }
             .map { firstVisible ->
@@ -244,8 +230,8 @@ fun TimelineScreen(
             .collect { (firstVisible, direction) ->
                 if (flat.isEmpty()) return@collect
                 val preloadIndices = when {
-                    direction >= 0 -> (firstVisible + 6)..(firstVisible + 96)
-                    else -> (firstVisible - 96)..(firstVisible - 6)
+                    direction >= 0 -> (firstVisible + 6)..(firstVisible + 48)
+                    else -> (firstVisible - 48)..(firstVisible - 6)
                 }
                 withContext(Dispatchers.IO) {
                     preloadIndices.forEach { index ->
@@ -256,6 +242,7 @@ fun TimelineScreen(
                             sizePx = thumbnailSizePx,
                             cacheVersion = item.dateModifiedSec,
                             highQuality = settings.highQualityThumbnails,
+                            path = item.absolutePath,
                         )
                     }
                 }

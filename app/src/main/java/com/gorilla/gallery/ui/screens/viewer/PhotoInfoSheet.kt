@@ -79,6 +79,26 @@ fun PhotoInfoSheet(app: AppViewModel, item: MediaItem, onDismiss: () -> Unit, on
         exifLoaded = true
     }
 
+    val svgDimensions by produceState<Pair<Int, Int>?>(null, item.id) {
+        if (item.format == "SVG" && (item.width == 0 || item.height == 0)) {
+            value = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openInputStream(item.uri)?.use { s ->
+                        val svg = com.caverock.androidsvg.SVG.getFromInputStream(s)
+                        val docW = svg.documentWidth
+                        val docH = svg.documentHeight
+                        val vb = svg.documentViewBox
+                        val w = if (docW > 0) docW.toInt() else vb?.width()?.toInt() ?: 0
+                        val h = if (docH > 0) docH.toInt() else vb?.height()?.toInt() ?: 0
+                        if (w > 0 && h > 0) Pair(w, h) else null
+                    }
+                }.getOrNull()
+            }
+        }
+    }
+    val actualWidth = svgDimensions?.first ?: item.width
+    val actualHeight = svgDimensions?.second ?: item.height
+
     if (!exifLoaded) return
 
     val dateZdt = Instant.ofEpochMilli(item.dateTakenMs).atZone(ZoneId.systemDefault())
@@ -229,7 +249,7 @@ fun PhotoInfoSheet(app: AppViewModel, item: MediaItem, onDismiss: () -> Unit, on
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         val profileTitle = if (item.isVideo) "VIDEO PROFILE" else "IMAGE PROFILE"
-                        val profileBadge = exif.profileBadge ?: if (item.isVideo) "SDR" else "sRGB"
+                        val profileBadge = if (item.format == "SVG") "Vector" else (exif.profileBadge ?: if (item.isVideo) "SDR" else "sRGB")
                         Text(profileTitle, fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = textColorSecondary.copy(alpha = 0.7f), letterSpacing = 0.8.sp)
                         Box(
                             modifier = Modifier
@@ -248,8 +268,10 @@ fun PhotoInfoSheet(app: AppViewModel, item: MediaItem, onDismiss: () -> Unit, on
                     }
 
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        InnerMetricCard(tag = "Dimensions", value = "${item.width} × ${item.height}", modifier = Modifier.weight(1.25f))
-                        InnerMetricCard(tag = "Megapixels", value = megapixels(item.width, item.height), modifier = Modifier.weight(1f))
+                        val dimensionsText = if (actualWidth > 0 && actualHeight > 0) "$actualWidth × $actualHeight" else "Scalable"
+                        val megapixelsText = if (actualWidth > 0 && actualHeight > 0) megapixels(actualWidth, actualHeight) else "Vector"
+                        InnerMetricCard(tag = "Dimensions", value = dimensionsText, modifier = Modifier.weight(1.25f))
+                        InnerMetricCard(tag = "Megapixels", value = megapixelsText, modifier = Modifier.weight(1f))
                         InnerMetricCard(tag = "File Size", value = formatFileSize(item.sizeBytes), modifier = Modifier.weight(1f))
                     }
                 }
@@ -385,6 +407,62 @@ fun PhotoInfoSheet(app: AppViewModel, item: MediaItem, onDismiss: () -> Unit, on
                                         }
                                     } catch (e: Exception) {
                                         android.util.Log.e("LensDebug", "Exception extracting frame", e)
+                                    }
+                                }
+                            } else if (item.isSvg) {
+                                android.util.Log.d("LensDebug", "Item is SVG, rendering to bitmap...")
+                                app.viewModelScope.launch(Dispatchers.IO) {
+                                    try {
+                                        val stream = runCatching { context.contentResolver.openInputStream(item.uri) }.getOrNull()
+                                            ?: if (item.absolutePath.isNotEmpty() && java.io.File(item.absolutePath).exists()) {
+                                                runCatching { java.io.FileInputStream(item.absolutePath) }.getOrNull()
+                                            } else null
+
+                                        val bitmap = stream?.use { s ->
+                                            val svg = com.caverock.androidsvg.SVG.getFromInputStream(s)
+                                            val docW = svg.documentWidth
+                                            val docH = svg.documentHeight
+                                            val vb = svg.documentViewBox
+                                            val srcW = if (docW > 0) docW else vb?.width() ?: 1024f
+                                            val srcH = if (docH > 0) docH else vb?.height() ?: 1024f
+                                            val maxDim = maxOf(srcW, srcH).coerceAtLeast(1f)
+                                            val targetDim = 1440f
+                                            val scale = targetDim / maxDim
+                                            val dstW = (srcW * scale).toInt().coerceAtLeast(1)
+                                            val dstH = (srcH * scale).toInt().coerceAtLeast(1)
+
+                                            if (vb == null && docW > 0 && docH > 0) {
+                                                svg.setDocumentViewBox(0f, 0f, docW, docH)
+                                            }
+                                            svg.setDocumentWidth("100%")
+                                            svg.setDocumentHeight("100%")
+
+                                            val bmp = android.graphics.Bitmap.createBitmap(dstW, dstH, android.graphics.Bitmap.Config.ARGB_8888)
+                                            val canvas = android.graphics.Canvas(bmp)
+                                            canvas.drawColor(android.graphics.Color.WHITE)
+                                            svg.renderToCanvas(canvas)
+                                            bmp
+                                        } ?: app.container.thumbnailRepository.getAnyCached(item.id, item.dateModifiedSec)
+
+                                        if (bitmap != null) {
+                                            context.cacheDir.listFiles { _, name -> name.startsWith("lens_svg_thumb") }?.forEach { it.delete() }
+                                            val cacheFile = java.io.File(context.cacheDir, "lens_svg_thumb_${System.currentTimeMillis()}.jpg")
+                                            cacheFile.outputStream().use { out ->
+                                                bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 95, out)
+                                            }
+                                            val contentUri = androidx.core.content.FileProvider.getUriForFile(
+                                                context,
+                                                "${context.packageName}.fileprovider",
+                                                cacheFile
+                                            )
+                                            withContext(Dispatchers.Main) {
+                                                launchLens(contentUri)
+                                            }
+                                        } else {
+                                            android.util.Log.e("LensDebug", "Failed to render SVG bitmap")
+                                        }
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("LensDebug", "Exception rendering SVG for Lens", e)
                                     }
                                 }
                             } else {

@@ -7,6 +7,9 @@ import com.gorilla.gallery.ui.theme.ThemeMode
 /** How photos are grouped into date sections on the timeline. */
 enum class DateGranularity(val label: String) { ALL("All"), DAY("Day"), MONTH("Month"), YEAR("Year") }
 
+/** Bottom navigation bar layout style in portrait mode. */
+enum class BottomBarStyle(val label: String) { SPLIT("Split"), FULL("Full") }
+
 /**
  * Selectable accent presets — identical set to GorillaMusic so the two apps share a
  * palette. ADAPTIVE pulls the dominant colour from the currently viewed photo.
@@ -63,6 +66,7 @@ data class AppSettings(
     val surfaceOpacity: Float = 0.4f,
     val gridColumns: Int = 3,
     val dateGranularity: DateGranularity = DateGranularity.ALL,
+    val bottomBarStyle: BottomBarStyle = BottomBarStyle.SPLIT,
     val highQualityThumbnails: Boolean = false,
     val playerSliderStyle: PlayerSliderStyle = PlayerSliderStyle.DEFAULT,
 
@@ -72,6 +76,7 @@ data class AppSettings(
     val enablePipMode: Boolean = false,
     val moveToTrashByDefaultForDelete: Boolean = true,
     val showScrollbar: Boolean = false,
+    val autoHideBottomBar: Boolean = false,
 
     // Privacy / Secure Folder
     val secureFolderEnabled: Boolean = false,

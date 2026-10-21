@@ -44,6 +44,7 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     fun setSurfaceOpacity(v: Float) = viewModelScope.launch { repo.setSurfaceOpacity(v) }
     fun setGridColumns(v: Int) = viewModelScope.launch { repo.setGridColumns(v) }
     fun setDateGranularity(v: DateGranularity) = viewModelScope.launch { repo.setDateGranularity(v) }
+    fun setBottomBarStyle(v: com.gorilla.gallery.data.settings.BottomBarStyle) = viewModelScope.launch { repo.setBottomBarStyle(v) }
     fun setHighQualityThumbnails(v: Boolean) = viewModelScope.launch { repo.setHighQualityThumbnails(v) }
     fun setPlayerSliderStyle(v: com.gorilla.gallery.data.settings.PlayerSliderStyle) = viewModelScope.launch { repo.setPlayerSliderStyle(v) }
     fun setLoopVideos(v: Boolean) = viewModelScope.launch { repo.setLoopVideos(v) }
@@ -51,6 +52,7 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     fun setEnablePipMode(v: Boolean) = viewModelScope.launch { repo.setEnablePipMode(v) }
     fun setMoveToTrashByDefaultForDelete(v: Boolean) = viewModelScope.launch { repo.setMoveToTrashByDefaultForDelete(v) }
     fun setShowScrollbar(v: Boolean) = viewModelScope.launch { repo.setShowScrollbar(v) }
+    fun setAutoHideBottomBar(v: Boolean) = viewModelScope.launch { repo.setAutoHideBottomBar(v) }
 
     fun setSecureEnabled(v: Boolean) = viewModelScope.launch { repo.setSecureFolderEnabled(v) }
     fun setBiometricUnlock(v: Boolean) = viewModelScope.launch { repo.setBiometricUnlock(v) }

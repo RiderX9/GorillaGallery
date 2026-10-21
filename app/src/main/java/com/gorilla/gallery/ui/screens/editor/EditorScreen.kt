@@ -2309,6 +2309,26 @@ private fun DoodleCanvas(
                 val maxH = constraints.maxHeight.toFloat()
                 val maxWdp = maxWidth
 
+                val animScope = androidx.compose.runtime.rememberCoroutineScope()
+                val enterAnim = remember { androidx.compose.animation.core.Animatable(0.4f) }
+                val alphaAnim = remember { androidx.compose.animation.core.Animatable(0f) }
+                androidx.compose.runtime.LaunchedEffect(Unit) {
+                    animScope.launch {
+                        enterAnim.animateTo(
+                            targetValue = 1f,
+                            animationSpec = androidx.compose.animation.core.spring(
+                                dampingRatio = 0.68f,
+                                stiffness = 380f
+                            )
+                        )
+                    }
+                    animScope.launch {
+                        alphaAnim.animateTo(
+                            targetValue = 1f,
+                            animationSpec = androidx.compose.animation.core.tween(150)
+                        )
+                    }
+                }
 
                 Box(
                     modifier = Modifier
@@ -2318,7 +2338,12 @@ private fun DoodleCanvas(
                                 (ft.offset.y - textHeight / 2f).toInt()
                             )
                         }
-                        .graphicsLayer { rotationZ = ft.rotation }
+                        .graphicsLayer {
+                            scaleX = enterAnim.value
+                            scaleY = enterAnim.value
+                            alpha = alphaAnim.value
+                            rotationZ = ft.rotation
+                        }
                         .onGloballyPositioned { coords ->
                             textWidth = coords.size.width
                             textHeight = coords.size.height
@@ -2397,9 +2422,26 @@ private fun DoodleCanvas(
                                 .size(24.dp)
                                 .background(Color.Red, androidx.compose.foundation.shape.CircleShape)
                                 .clickable {
-                                    vm.floatingTexts.removeAt(index)
-                                    vm.activeTextIndex.intValue = -1
-                                    vm.isTextMode.value = false
+                                    animScope.launch {
+                                        launch {
+                                            enterAnim.animateTo(
+                                                targetValue = 0.4f,
+                                                animationSpec = androidx.compose.animation.core.tween(150)
+                                            )
+                                        }
+                                        launch {
+                                            alphaAnim.animateTo(
+                                                targetValue = 0f,
+                                                animationSpec = androidx.compose.animation.core.tween(150)
+                                            )
+                                        }
+                                        kotlinx.coroutines.delay(150)
+                                        if (index in vm.floatingTexts.indices) {
+                                            vm.floatingTexts.removeAt(index)
+                                        }
+                                        vm.activeTextIndex.intValue = -1
+                                        vm.isTextMode.value = false
+                                    }
                                 },
                             contentAlignment = Alignment.Center
                         ) {

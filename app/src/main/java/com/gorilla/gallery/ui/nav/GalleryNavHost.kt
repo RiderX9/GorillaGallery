@@ -336,53 +336,77 @@ fun GalleryNavHost(
             var allowedUris by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Set<String>>(emptySet()) }
             var isLoaded by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
             androidx.compose.runtime.LaunchedEffect(Unit) {
-                val baseUris = app.container.imageLabelRepository.searchImagePaths("document") + 
-                               app.container.imageLabelRepository.searchImagePaths("receipt") + 
-                               app.container.imageLabelRepository.searchImagePaths("paper") + 
-                               app.container.imageLabelRepository.searchImagePaths("handwriting") +
-                               app.container.imageLabelRepository.searchImagePaths("invoice") +
-                               app.container.imageLabelRepository.searchImagePaths("form") +
-                               app.container.imageLabelRepository.searchImagePaths("passport") +
-                               app.container.imageLabelRepository.searchImagePaths("identity document") +
-                               app.container.imageLabelRepository.searchImagePaths("id card") +
-                               app.container.imageLabelRepository.searchImagePaths("license") +
-                               app.container.textIndexRepository.getPathsWithMinimumTextLength(50)
-                               
-                val excludedUris = app.container.imageLabelRepository.searchImagePaths("electronics") +
-                                   app.container.imageLabelRepository.searchImagePaths("screen") +
-                                   app.container.imageLabelRepository.searchImagePaths("display") +
-                                   app.container.imageLabelRepository.searchImagePaths("tv") +
-                                   app.container.imageLabelRepository.searchImagePaths("television") +
-                                   app.container.imageLabelRepository.searchImagePaths("monitor") +
-                                   app.container.imageLabelRepository.searchImagePaths("computer") +
-                                   app.container.imageLabelRepository.searchImagePaths("laptop") +
-                                   app.container.imageLabelRepository.searchImagePaths("mobile phone") +
-                                   app.container.imageLabelRepository.searchImagePaths("smartphone") +
-                                   app.container.imageLabelRepository.searchImagePaths("nature") +
-                                   app.container.imageLabelRepository.searchImagePaths("plant") +
-                                   app.container.imageLabelRepository.searchImagePaths("flower") +
-                                   app.container.imageLabelRepository.searchImagePaths("tree") +
-                                   app.container.imageLabelRepository.searchImagePaths("landscape") +
-                                   app.container.imageLabelRepository.searchImagePaths("outdoor") +
-                                   app.container.imageLabelRepository.searchImagePaths("mountain") +
-                                   app.container.imageLabelRepository.searchImagePaths("water") +
-                                   app.container.imageLabelRepository.searchImagePaths("ocean") +
-                                   app.container.imageLabelRepository.searchImagePaths("beach") +
-                                   app.container.imageLabelRepository.searchImagePaths("sky") +
-                                   app.container.imageLabelRepository.searchImagePaths("forest") +
-                                   app.container.imageLabelRepository.searchImagePaths("grass") +
-                                   app.container.imageLabelRepository.searchImagePaths("petal") +
-                                   app.container.imageLabelRepository.searchImagePaths("leaf") +
-                                   app.container.imageLabelRepository.searchImagePaths("pet") +
-                                   app.container.imageLabelRepository.searchImagePaths("dog") +
-                                   app.container.imageLabelRepository.searchImagePaths("cat") +
-                                   app.container.imageLabelRepository.searchImagePaths("animal") +
-                                   app.container.imageLabelRepository.searchImagePaths("food") +
-                                   app.container.imageLabelRepository.searchImagePaths("drink") +
-                                   app.container.imageLabelRepository.searchImagePaths("vehicle") +
-                                   app.container.imageLabelRepository.searchImagePaths("car")
-                                   
-                allowedUris = baseUris - excludedUris
+                val priorityDocs = listOf(
+                    "identity document", "id card", "passport", "license", "receipt", "invoice"
+                )
+                val priorityDocUris = buildSet {
+                    for (tag in priorityDocs) {
+                        addAll(app.container.imageLabelRepository.searchImagePaths(tag))
+                    }
+                }
+
+                val baseTags = listOf(
+                    "document", "receipt", "paper", "handwriting", "invoice",
+                    "form", "passport", "identity document", "id card", "license"
+                )
+                val baseUris = buildSet {
+                    for (tag in baseTags) {
+                        addAll(app.container.imageLabelRepository.searchImagePaths(tag))
+                    }
+                    addAll(app.container.textIndexRepository.getPathsWithMinimumTextLength(50))
+                }
+
+                val excludedTags = listOf(
+                    // Screens & digital interfaces
+                    "screenshot", "screen shot", "web page", "website", "software", "user interface",
+                    "operating system", "electronics", "screen", "display", "tv", "television",
+                    "monitor", "computer", "laptop", "mobile phone", "smartphone",
+                    
+                    // Nature, plants & animals
+                    "nature", "plant", "flower", "tree", "landscape", "outdoor", "mountain",
+                    "water", "ocean", "beach", "sky", "forest", "grass", "petal", "leaf",
+                    "pet", "dog", "cat", "animal",
+                    
+                    // Food & drink
+                    "food", "drink", "dish", "cuisine", "meal",
+                    
+                    // Vehicles & transit
+                    "vehicle", "car", "motor vehicle", "automobile", "truck", "bus", "motorcycle",
+                    "bicycle", "airplane", "aircraft", "train", "boat",
+                    
+                    // Art, posters, illustrations & memes
+                    "poster", "art", "artwork", "illustration", "drawing", "painting", "sketch",
+                    "cartoon", "animation", "anime", "manga", "comic", "comic book",
+                    "fictional character", "clip art", "graphic design", "graphics",
+                    
+                    // Signs, billboards & architecture
+                    "billboard", "signage", "sign", "banner", "advertising", "traffic sign",
+                    "street sign", "building", "architecture", "facade", "house", "skyscraper",
+                    "street", "road", "city", "urban area", "town",
+                    
+                    // Books, media & packaging
+                    "book", "book cover", "novel", "magazine", "publication", "album cover",
+                    "board game", "games", "box", "cardboard", "packaging and labeling", "carton",
+                    
+                    // Toys & games
+                    "toy", "toys", "play", "doll", "action figure", "stuffed toy", "plush", "lego", "figurine",
+                    
+                    // Furniture, interior & household
+                    "furniture", "table", "desk", "chair", "couch", "bed", "room",
+                    "interior design", "shelf", "shelving", "floor", "flooring", "wall", "wood",
+                    
+                    // Additional tech & hardware
+                    "gadget", "electronic device", "multimedia", "computer keyboard", "keyboard",
+                    "mouse", "hardware"
+                )
+
+                val excludedUris = buildSet {
+                    for (tag in excludedTags) {
+                        addAll(app.container.imageLabelRepository.searchImagePaths(tag))
+                    }
+                }
+
+                allowedUris = (baseUris - excludedUris) + priorityDocUris
                 isLoaded = true
             }
             val currentUris = allowedUris

@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 
 import android.Manifest
 import android.os.Build
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.animation.core.animateDpAsState
@@ -67,6 +68,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.ui.geometry.Rect
 import com.gorilla.gallery.ui.components.GlassIconPill
+
+val LocalBottomBarScrollListener = androidx.compose.runtime.staticCompositionLocalOf<(Boolean) -> Unit> { {} }
 
 private data class ViewerRequest(
     val openId: Long,
@@ -234,13 +237,6 @@ fun GalleryRoot(
             // the translucent viewer would reveal the grid through it during either animation.
             val showViewerBackdrop = ((viewerOverlayMounted || holdReturnBackdrop) && !isEditorOpen) || editorOpeningBackdrop
             if (showViewerBackdrop) {
-                val backdropAlpha = if (holdReturnBackdrop) {
-                    1f
-                } else if (viewerOpening) {
-                    ((1f - viewerDismissProgress) / 0.28f).coerceIn(0f, 1f)
-                } else {
-                    (1f - (viewerDismissProgress / 0.28f)).coerceIn(0f, 1f)
-                }
                 val viewerBackdropColor = if (appColors.isDark) {
                     Color.Black
                 } else {
@@ -249,7 +245,15 @@ fun GalleryRoot(
                 Box(
                     Modifier
                         .fillMaxSize()
-                        .alpha(backdropAlpha)
+                        .graphicsLayer {
+                            alpha = if (holdReturnBackdrop) {
+                                1f
+                            } else if (viewerOpening) {
+                                ((1f - viewerDismissProgress) / 0.28f).coerceIn(0f, 1f)
+                            } else {
+                                (1f - (viewerDismissProgress / 0.28f)).coerceIn(0f, 1f)
+                            }
+                        }
                         .background(viewerBackdropColor)
                 )
             }
@@ -415,7 +419,15 @@ private fun MainShell(
         !route.startsWith("editor") && !route.startsWith("videoEditor")
     } ?: true
 
-    CompositionLocalProvider(LocalLiquidGlassContentBackdrop provides contentBackdrop) {
+    val appSettings = com.gorilla.gallery.ui.theme.LocalAppSettings.current
+    val isFullBar = appSettings.bottomBarStyle == com.gorilla.gallery.data.settings.BottomBarStyle.FULL
+    val autoHide = appSettings.autoHideBottomBar
+    var isBottomBarAutoHidden by remember { mutableStateOf(false) }
+
+    CompositionLocalProvider(
+        LocalLiquidGlassContentBackdrop provides contentBackdrop,
+        LocalBottomBarScrollListener provides { isBottomBarAutoHidden = it }
+    ) {
         Box(Modifier.fillMaxSize()) {
             val startPadding by androidx.compose.animation.core.animateDpAsState(
                 targetValue = if (isLandscape && showNav) 96.dp else 0.dp,
@@ -510,94 +522,124 @@ private fun MainShell(
                         }
                     }
                 } else {
+                    val bottomBarOffset by androidx.compose.animation.core.animateDpAsState(
+                        targetValue = if (autoHide && isBottomBarAutoHidden && !isLandscape) 140.dp else 0.dp,
+                        animationSpec = androidx.compose.animation.core.spring(
+                            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioLowBouncy,
+                            stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow
+                        ),
+                        label = "bottomBarOffset"
+                    )
+
+                    val onSelectDestination: (Destination) -> Unit = { dest ->
+                        if (dest == Destination.Search) {
+                            val isSearchSelected = current == Destination.Search
+                            if (!isSearchSelected) {
+                                if (current == Destination.Albums) {
+                                    app.collapseAlbums()
+                                }
+                                navController.navigate("${Destination.Search.route}?autoFocus=true") {
+                                    launchSingleTop = true
+                                }
+                            } else {
+                                val topRoute = navController.currentDestination?.route
+                                if (topRoute?.startsWith(Destination.Search.route) != true) {
+                                    navController.popBackStack(Destination.Search.route, inclusive = true)
+                                    navController.navigate("${Destination.Search.route}?autoFocus=false") {
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                }
+                            }
+                        } else if (dest.route != current.route) {
+                            if (current == Destination.Albums && dest != Destination.Albums) {
+                                app.collapseAlbums()
+                            }
+
+                            var shouldNavigate = true
+                            
+                            if (current == Destination.Search) {
+                                navController.popBackStack(Destination.Search.route, inclusive = true)
+                                val topRoute = navController.currentDestination?.route
+                                if (topRoute == dest.route) {
+                                    shouldNavigate = false
+                                }
+                            } else if (dest == Destination.Albums) {
+                                if (navController.popBackStack(Destination.Albums.route, inclusive = false)) {
+                                    shouldNavigate = false
+                                }
+                            }
+
+                            if (shouldNavigate) {
+                                navController.navigate(dest.route) {
+                                    popUpTo(Destination.Timeline.route) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
+                        } else {
+                            if (dest == Destination.Albums) {
+                                navController.popBackStack(Destination.Albums.route, inclusive = false)
+                            }
+                        }
+                    }
+
                     Box(modifier = Modifier.fillMaxSize()) {
                         Box(
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
+                                .offset(y = bottomBarOffset)
                                 .fillMaxWidth()
                                 .navigationBarsPadding()
                                 .padding(bottom = 8.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp),
-                    ) {
-                        // Main Nav Bar (Left)
-                        Box(modifier = Modifier.align(Alignment.CenterStart)) {
-                            GlassNavigationBar(
-                                current = current,
-                                onSelect = { dest ->
-                                    if (dest.route != current.route) {
-                                        if (current == Destination.Albums && dest != Destination.Albums) {
-                                            app.collapseAlbums()
-                                        }
+                            if (isFullBar) {
+                                // Full Bar (Centered, all 4 tabs: Photos / Albums / Settings / Search)
+                                GlassNavigationBar(
+                                    current = current,
+                                    destinations = listOf(
+                                        Destination.Timeline,
+                                        Destination.Albums,
+                                        Destination.Settings,
+                                        Destination.Search
+                                    ),
+                                    onSelect = onSelectDestination,
+                                    modifier = Modifier.align(Alignment.Center)
+                                )
+                            } else {
+                                // Split Bar (Default: Bar on left, Search Pill on right)
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 24.dp),
+                                ) {
+                                    // Main Nav Bar (Left)
+                                    Box(modifier = Modifier.align(Alignment.CenterStart)) {
+                                        GlassNavigationBar(
+                                            current = current,
+                                            destinations = Destination.bottomBar,
+                                            onSelect = onSelectDestination
+                                        )
+                                    }
 
-                                        var shouldNavigate = true
-                                        
-                                        if (current == Destination.Search) {
-                                            navController.popBackStack(Destination.Search.route, inclusive = true)
-                                            val topRoute = navController.currentDestination?.route
-                                            if (topRoute == dest.route) {
-                                                shouldNavigate = false
-                                            }
-                                        } else if (dest == Destination.Albums) {
-                                            if (navController.popBackStack(Destination.Albums.route, inclusive = false)) {
-                                                shouldNavigate = false
-                                            }
-                                        }
-
-                                        if (shouldNavigate) {
-                                            navController.navigate(dest.route) {
-                                                popUpTo(Destination.Timeline.route) { saveState = true }
-                                                launchSingleTop = true
-                                                restoreState = true
-                                            }
-                                        }
-                                    } else {
-                                        if (dest == Destination.Albums) {
-                                            navController.popBackStack(Destination.Albums.route, inclusive = false)
-                                        }
+                                    // Search Pill (Right)
+                                    Box(modifier = Modifier.align(Alignment.CenterEnd)) {
+                                        val isSearchSelected = current == Destination.Search
+                                        val surfaceOpacity = com.gorilla.gallery.ui.theme.LocalTrueLiquidGlassSurfaceOpacity.current
+                                        TimelineCirclePill(
+                                            icon = Icons.Rounded.Search,
+                                            contentDescription = "Search",
+                                            tint = if (isSearchSelected) LocalDynamicColors.current.accent.copy(alpha = 0.75f) else DesignTokens.TextSecondary,
+                                            surfaceAlphaOverride = surfaceOpacity,
+                                            size = 64.dp,
+                                            iconSize = 24.dp,
+                                            isSelected = isSearchSelected,
+                                            onClick = { onSelectDestination(Destination.Search) }
+                                        )
                                     }
                                 }
-                            )
-                        }
-
-                        // Search Pill (Right)
-                        Box(modifier = Modifier.align(Alignment.CenterEnd)) {
-                            val isSearchSelected = current == Destination.Search
-                            val surfaceOpacity = com.gorilla.gallery.ui.theme.LocalTrueLiquidGlassSurfaceOpacity.current
-                            TimelineCirclePill(
-                                icon = Icons.Rounded.Search,
-                                contentDescription = "Search",
-                                tint = if (isSearchSelected) LocalDynamicColors.current.accent.copy(alpha = 0.75f) else DesignTokens.TextSecondary,
-                                surfaceAlphaOverride = surfaceOpacity,
-                                size = 64.dp,
-                                iconSize = 24.dp,
-                                isSelected = isSearchSelected,
-                                onClick = {
-                                    if (!isSearchSelected) {
-                                        if (current == Destination.Albums) {
-                                            app.collapseAlbums()
-                                        }
-                                        navController.navigate("${Destination.Search.route}?autoFocus=true") {
-                                            launchSingleTop = true
-                                        }
-                                    } else {
-                                        val topRoute = navController.currentDestination?.route
-                                        if (topRoute?.startsWith(Destination.Search.route) != true) {
-                                            navController.popBackStack(Destination.Search.route, inclusive = true)
-                                            navController.navigate("${Destination.Search.route}?autoFocus=false") {
-                                                launchSingleTop = true
-                                                restoreState = true
-                                            }
-                                        }
-                                    }
-                                }
-                            )
-                        }
-                    }
+                            }
                         }
                     }
                 }

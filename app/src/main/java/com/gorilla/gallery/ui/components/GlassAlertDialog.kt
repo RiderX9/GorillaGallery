@@ -79,16 +79,16 @@ fun AnimatedGlassDialog(
             }
 
             val scale by animateFloatAsState(
-                targetValue = if (isVisible) 1f else 0.85f,
-                animationSpec = spring(dampingRatio = 0.75f, stiffness = 300f),
+                targetValue = if (isVisible) 1f else 0.82f,
+                animationSpec = spring(dampingRatio = 0.75f, stiffness = 380f),
                 label = "dialogScale"
             )
 
             Box(modifier = Modifier.fillMaxSize()) {
                 AnimatedVisibility(
                     visible = isVisible,
-                    enter = fadeIn(animationSpec = tween(200)),
-                    exit = fadeOut(animationSpec = tween(200))
+                    enter = fadeIn(animationSpec = tween(180)),
+                    exit = fadeOut(animationSpec = tween(180))
                 ) {
                     Box(
                         modifier = Modifier
@@ -101,19 +101,7 @@ fun AnimatedGlassDialog(
                             ),
                         contentAlignment = Alignment.Center,
                     ) {
-                        androidx.compose.animation.AnimatedVisibility(
-                            visible = isVisible,
-                            enter = androidx.compose.animation.slideInVertically(
-                                initialOffsetY = { 150 },
-                                animationSpec = tween(200)
-                            ),
-                            exit = androidx.compose.animation.slideOutVertically(
-                                targetOffsetY = { 150 },
-                                animationSpec = tween(200)
-                            )
-                        ) {
-                            content(scale)
-                        }
+                        content(scale)
                     }
                 }
             }

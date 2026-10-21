@@ -3,6 +3,7 @@ package com.gorilla.gallery
 import android.app.Application
 import android.content.Context
 import coil.ImageLoader
+import coil.ImageLoaderFactory
 import coil.decode.VideoFrameDecoder
 import coil.memory.MemoryCache
 import com.gorilla.gallery.data.db.AppDatabase
@@ -30,7 +31,7 @@ import java.util.concurrent.Executors
  * Application-scoped dependency container (manual DI — no Hilt for this size). Exposed
  * through [container] and consumed by ViewModel factories via CreationExtras.
  */
-class GalleryApp : Application() {
+class GalleryApp : Application(), ImageLoaderFactory {
 
     lateinit var container: AppContainer
         private set
@@ -40,7 +41,10 @@ class GalleryApp : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        com.gorilla.gallery.data.service.NewMediaJobService.scheduleJob(this)
     }
+
+    override fun newImageLoader(): ImageLoader = container.imageLoader
 }
 
 class AppContainer(app: GalleryApp) {
@@ -53,9 +57,12 @@ class AppContainer(app: GalleryApp) {
         }
     }.asCoroutineDispatcher()
 
-    /** Single Coil loader that also renders video first-frames as thumbnails. */
+    /** Single Coil loader that also renders video first-frames as thumbnails and decodes SVGs. */
     val imageLoader: ImageLoader = ImageLoader.Builder(context)
-        .components { add(VideoFrameDecoder.Factory()) }
+        .components {
+            add(VideoFrameDecoder.Factory())
+            add(coil.decode.SvgDecoder.Factory())
+        }
         .fetcherDispatcher(imageDecodeDispatcher)
         .decoderDispatcher(imageDecodeDispatcher)
         .memoryCache {

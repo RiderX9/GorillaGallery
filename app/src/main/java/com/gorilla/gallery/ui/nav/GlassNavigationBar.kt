@@ -33,11 +33,13 @@ fun GlassNavigationBar(
     current: Destination,
     onSelect: (Destination) -> Unit,
     modifier: Modifier = Modifier,
+    destinations: List<Destination> = Destination.bottomBar,
 ) {
     LiquidGlassNavigationBar(
         current = current,
         onSelect = onSelect,
         modifier = modifier,
+        destinations = destinations,
     )
 }
 
@@ -46,16 +48,17 @@ private fun LiquidGlassNavigationBar(
     current: Destination,
     onSelect: (Destination) -> Unit,
     modifier: Modifier = Modifier,
+    destinations: List<Destination> = Destination.bottomBar,
 ) {
     val contentBackdrop = LocalLiquidGlassContentBackdrop.current ?: com.kyant.backdrop.backdrops.rememberLayerBackdrop()
     var lastValidIndex by remember { androidx.compose.runtime.mutableIntStateOf(0) }
-    val selectedIndex = remember(current) {
-        val idx = Destination.bottomBar.indexOf(current)
+    val selectedIndex = remember(current, destinations) {
+        val idx = destinations.indexOf(current)
         if (idx >= 0) {
             lastValidIndex = idx
             idx
         } else {
-            lastValidIndex
+            lastValidIndex.coerceIn(0, (destinations.size - 1).coerceAtLeast(0))
         }
     }
     val haptic = rememberHaptic()
@@ -64,18 +67,18 @@ private fun LiquidGlassNavigationBar(
         modifier = modifier,
         selectedIndex = selectedIndex,
         onSelected = { index -> 
-            val dest = Destination.bottomBar.getOrNull(index)
+            val dest = destinations.getOrNull(index)
             if (dest != null) {
                 if (dest != current) haptic()
                 onSelect(dest)
             }
         },
         backdrop = contentBackdrop,
-        tabsCount = Destination.bottomBar.size,
+        tabsCount = destinations.size,
         isBlurEnabled = true,
-        showHighlight = Destination.bottomBar.indexOf(current) != -1
+        showHighlight = destinations.indexOf(current) != -1
     ) {
-        Destination.bottomBar.forEach { dest ->
+        destinations.forEach { dest ->
             val isSelected = dest == current
             val accent = LocalDynamicColors.current.accent
             val inactiveColor = DesignTokens.TextSecondary
